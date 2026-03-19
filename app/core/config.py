@@ -13,9 +13,9 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
 
     
-    BACKEND_CORS_ORIGINS = [
+    BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:8082",
-        "http://127.0.0.1:8082",
+        "http://127.0.0.1:8082"
     ]
 
     class Config:
