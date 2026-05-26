@@ -3,8 +3,10 @@ services:
     build: .
     container_name: predictive_backend
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ports:
-      - "8003:8003"
+      - "127.0.0.1:8003:8003"
     networks:
       - centinela-net
 

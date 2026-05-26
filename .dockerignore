@@ -30,6 +30,8 @@ MANIFEST
 
 # Virtual environments
 .env
+.env*
+*.env
 .venv
 env/
 venv/
@@ -54,6 +56,18 @@ ehthumbs.db
 Thumbs.db
 
 # Logs
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.bak
+*.backup
 *.log
 logs/
 
@@ -79,3 +93,7 @@ node_modules/
 
 # Archivos específicos que no queremos en el contenedor
 publication_data_p.csv
+Dockerfile*
+docker-compose*.yml
+docker-compose*.yaml
+.dockerignore
