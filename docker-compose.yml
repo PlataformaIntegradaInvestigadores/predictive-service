@@ -1,0 +1,15 @@
+services:
+  predictive_backend:
+    build: .
+    container_name: predictive_backend
+    ports:
+      - "8003:8003"
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - centinela-net
+
+networks:
+  centinela-net:
+    external: true
