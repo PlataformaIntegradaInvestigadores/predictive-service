@@ -81,21 +81,36 @@ jobs:
   # ── Deploy staging ─────────────────────────────────────────────────────────
   deploy-staging:
     name: Deploy a servidor staging
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: test-integration
     if: github.ref == 'refs/heads/staging'
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.STAGING_HOST }}
-          username: ${{ secrets.STAGING_USER }}
-          key: ${{ secrets.STAGING_SSH_KEY }}
-          script_stop: false
-          script: |
-            set -e
-            cd /opt/centinela/predictive_model_backend && git pull origin staging
-            cd /opt/centinela && docker compose up -d --build predictive-backend
-            sleep 10
+      - name: Actualizar codigo
+        run: |
+          cd /opt/centinela/predictive_model_backend
+          git fetch origin staging
+          git reset --hard origin/staging
+
+      - name: Reconstruir contenedor
+        run: |
+          cd /opt/centinela
+          docker compose up -d --build predictive-backend
+
+      - name: Health check
+        run: |
+          sleep 15
+          HEALTHY=false
+          for i in 1 2 3 4 5; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:8003/health || echo "000")
-            echo "Health check HTTP $STATUS"
+            echo "Intento $i: HTTP $STATUS"
+            if [ "$STATUS" = "200" ] || [ "$STATUS" = "301" ] || [ "$STATUS" = "404" ]; then
+              HEALTHY=true; break
+            fi
+            sleep 6
+          done
+          if [ "$HEALTHY" = "false" ]; then
+            echo "Health check fallido — rollback"
+            cd /opt/centinela/predictive_model_backend && git reset --hard HEAD~1
+            cd /opt/centinela && docker compose up -d --build predictive-backend
+            exit 1
+          fi
