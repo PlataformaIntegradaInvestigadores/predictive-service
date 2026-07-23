@@ -2,6 +2,7 @@
 
 import joblib
 import pandas as pd
+import time
 from pathlib import Path
 from typing import List, Dict, Optional
 
@@ -10,16 +11,21 @@ class PredictionService:
     Contiene toda la lógica de negocio para cargar modelos, datos
     y realizar las predicciones y análisis.
     """
+
+    RANKING_CACHE_TTL_SECONDS = 3600
+
     def __init__(self):
         # Cargar todos los activos una sola vez al instanciar el servicio.
         BASE_DIR = Path(__file__).resolve().parent.parent.parent
         self.MODEL_PATH = BASE_DIR / "publication_model.pkl"
         self.ENCODER_PATH = BASE_DIR / "affiliation_encoder.pkl"
         self.HISTORICAL_DATA_PATH = BASE_DIR / "publication_data.csv"
-        
+
         self.model = None
         self.encoder = None
         self.historical_df = None
+        self._ranking_cache = None
+        self._ranking_cache_timestamp = 0
         self._load_assets()
 
     def _load_assets(self):
@@ -100,7 +106,11 @@ class PredictionService:
         return {"affiliation_name": affiliation_name, "data": historical_data + projection_data}
 
     def get_ranking(self) -> List[Dict]:
-        """Calcula el ranking de crecimiento para todas las afiliaciones."""
+        """Calcula el ranking de crecimiento para todas las afiliaciones (con caché)."""
+        now = time.time()
+        if self._ranking_cache is not None and (now - self._ranking_cache_timestamp) < self.RANKING_CACHE_TTL_SECONDS:
+            return self._ranking_cache
+
         ranking_data = []
         all_affiliations = self.get_all_affiliations()
 
@@ -131,7 +141,9 @@ class PredictionService:
         
         for i, item in enumerate(sorted_ranking):
             item['rank'] = i + 1
-            
+
+        self._ranking_cache = sorted_ranking
+        self._ranking_cache_timestamp = now
         return sorted_ranking
 
     def get_model_details(self) -> Dict:
