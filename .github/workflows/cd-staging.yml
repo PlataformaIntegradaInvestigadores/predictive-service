@@ -32,7 +32,7 @@ jobs:
             cd /opt/centinela
 
             echo "=== [3/4] Rebuilding y desplegando ==="
-            docker compose up -d --build predictive-backend
+            docker compose up -d --build --no-deps predictive-backend
 
             echo "=== [4/4] Health checks ==="
             sleep 10
@@ -52,7 +52,7 @@ jobs:
             if [ "$HEALTHY" = "false" ]; then
               echo "=== [ROLLBACK] Health check falló — revirtiendo ==="
               cd /opt/centinela/predictive_model_backend && git checkout HEAD~1
-              cd /opt/centinela && docker compose up -d --build predictive-backend
+              cd /opt/centinela && docker compose up -d --build --no-deps predictive-backend
               echo "  [ROLLBACK COMPLETADO]"
               exit 1
             fi
