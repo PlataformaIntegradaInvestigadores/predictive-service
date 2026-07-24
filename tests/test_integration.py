@@ -84,7 +84,7 @@ class TestProjectionEndpoint:
             assert "error" in data
 
     def test_get_projection_with_hypothetical_authors(self, client):
-        response = client.get("/api/v1/projection/MIT?years=2&hypothetical_authors=50")
+        response = client.get("/api/v1/projection/MIT?projection_years=2&hypothetical_authors=50")
         assert response.status_code == 200
         data = response.json()
         predicted = [d for d in data["data"] if d["type"] == "predicted"]
@@ -106,16 +106,16 @@ class TestProjectionEndpoint:
 @pytest.mark.integration
 class TestCompareEndpoint:
     def test_post_compare_valid(self, client):
-        payload = {"affiliations": ["MIT", "Stanford"], "years": 3}
-        response = client.post("/api/v1/projection/compare", json=payload)
+        payload = {"affiliation_names": ["MIT", "Stanford"]}
+        response = client.post("/api/v1/projection/compare?projection_years=3", json=payload)
         assert response.status_code == 200
         data = response.json()
         assert "results" in data
         assert len(data["results"]) == 2
 
     def test_post_compare_single_affiliation(self, client):
-        payload = {"affiliations": ["EPN"], "years": 2}
-        response = client.post("/api/v1/projection/compare", json=payload)
+        payload = {"affiliation_names": ["EPN"]}
+        response = client.post("/api/v1/projection/compare?projection_years=2", json=payload)
         assert response.status_code == 200
         data = response.json()
         assert len(data["results"]) == 1
