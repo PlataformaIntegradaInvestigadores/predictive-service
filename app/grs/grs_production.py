@@ -107,8 +107,31 @@ class DataPreprocessor:
     def get_topic_frequency(self) -> Dict[str, int]:
         """Calcula frecuencia de cada tópico"""
         return self.df_topic_article['topic'].value_counts().to_dict()
-    
-    def get_articles_by_period(self, period1_start=2020, period1_end=2022, 
+
+    def get_topic_frequency_by_period(self, article_topics_map: Dict[str, Set],
+                                       articles_p1: Set, articles_p2: Set
+                                       ) -> Tuple[Dict[str, int], Dict[str, int]]:
+        """
+        Calcula la frecuencia de cada tópico por separado en cada período,
+        para medir qué tan emergente es un tópico (novedad temporal).
+
+        Returns:
+            (topic_frequency_p1, topic_frequency_p2)
+        """
+        freq_p1 = defaultdict(int)
+        freq_p2 = defaultdict(int)
+
+        for aid in articles_p1:
+            for topic in article_topics_map.get(aid, set()):
+                freq_p1[topic] += 1
+
+        for aid in articles_p2:
+            for topic in article_topics_map.get(aid, set()):
+                freq_p2[topic] += 1
+
+        return dict(freq_p1), dict(freq_p2)
+
+    def get_articles_by_period(self, period1_start=2020, period1_end=2022,
                                 period2_start=2023, period2_end=2025) -> Tuple[Set, Set]:
         """
         Divide artículos en dos períodos temporales.
@@ -277,18 +300,23 @@ class SimilarityCalculator:
 class GroupRecommendationSystem:
     """Algoritmo GRS híbrido"""
     
-    def __init__(self, groups: Dict, all_topics: Set, topic_frequency: Dict):
+    def __init__(self, groups: Dict, all_topics: Set, topic_frequency: Dict,
+                 topic_frequency_p1: Dict = None, topic_frequency_p2: Dict = None):
         """
         Inicializa GRS.
-        
+
         Args:
             groups: Dict de grupos persistentes
             all_topics: Set de todos los tópicos
             topic_frequency: Dict[topic -> frecuencia]
+            topic_frequency_p1: Dict[topic -> frecuencia en período 1]
+            topic_frequency_p2: Dict[topic -> frecuencia en período 2]
         """
         self.groups = groups
         self.all_topics = all_topics
         self.topic_frequency = topic_frequency
+        self.topic_frequency_p1 = topic_frequency_p1 or {}
+        self.topic_frequency_p2 = topic_frequency_p2 or {}
         self.max_freq = max(topic_frequency.values()) if topic_frequency else 1
         self.similarities = SimilarityCalculator.compute_group_similarities(groups)
     
@@ -308,20 +336,35 @@ class GroupRecommendationSystem:
         freq = self.topic_frequency.get(topic, 0)
         return 1.0 - (freq / self.max_freq)
     
-    def compute_novelty(self, topic: str, explored_topics: Set) -> float:
+    def compute_novelty(self, topic: str) -> float:
         """
-        Calcula novelty de un tópico.
-        
-        novelty = 1 si no explorado, 0 si ya explorado
-        
+        Calcula novelty de un tópico como su emergencia temporal: qué
+        proporción de sus apariciones en el corpus caen en el período
+        reciente frente al total.
+
+        novelty = freq_p2 / (freq_p1 + freq_p2)
+        → 1.0 si el tópico es enteramente nuevo/emergente en el período 2
+        → 0.0 si el tópico ya no se investiga desde el período 1
+        → valores intermedios para tópicos activos en ambos períodos
+
+        (El filtro de "ya explorado por este grupo" es un paso previo y
+        aparte en recommend_for_group; esta función mide novedad del tópico
+        en el corpus completo, no respecto a un grupo en particular.)
+
         Args:
             topic: Nombre del tópico
-            explored_topics: Set de tópicos ya explorados
-        
+
         Returns:
-            float (0 o 1)
+            float entre 0 y 1
         """
-        return 0.0 if topic in explored_topics else 1.0
+        freq_p1 = self.topic_frequency_p1.get(topic, 0)
+        freq_p2 = self.topic_frequency_p2.get(topic, 0)
+        total = freq_p1 + freq_p2
+
+        if total == 0:
+            return 1.0
+
+        return freq_p2 / total
     
     def compute_collaborative_signal(self, topic: str, 
                                      similar_groups_data: List) -> float:
@@ -344,38 +387,40 @@ class GroupRecommendationSystem:
         return signal / len(similar_groups_data) if similar_groups_data else 0.0
     
     def recommend_for_group(self, group_id: int, k: int = 10,
-                           alpha: float = 0.4, beta: float = 0.5, 
-                           gamma: float = 0.1) -> pd.DataFrame:
+                           alpha: float = 0.3, beta: float = 0.2,
+                           gamma: float = 0.5) -> pd.DataFrame:
         """
         Genera recomendaciones para un grupo específico.
-        
+
         Score = (α × Relevancia + β × Colaborativo + γ × Novedad) / (α + β + γ)
-        
+
         Args:
             group_id: ID del grupo
             k: Número de recomendaciones
             alpha: Peso de relevancia
             beta: Peso colaborativo
             gamma: Peso de novedad
-        
+
         Returns:
             DataFrame con columnas: topic, novelty, relevance, collaborative_signal, score
         """
         group = self.groups[group_id]
-        explored_topics = group['topics_p1']
-        
+        # Incluye ambos períodos: no repetir ni lo histórico ni lo ya
+        # investigado recientemente por el grupo.
+        explored_topics = group['topics_p1'] | group['topics_p2']
+
         # Obtener grupos similares
         similar_groups = self.similarities.get(group_id, [])
-        
+
         # Scoring
         scores = []
         for topic in self.all_topics:
             # No recomendar lo ya explorado
             if topic in explored_topics:
                 continue
-            
+
             # Componentes
-            novelty = self.compute_novelty(topic, explored_topics)
+            novelty = self.compute_novelty(topic)
             relevance = self.compute_relevance(topic)
             collaborative = self.compute_collaborative_signal(topic, similar_groups)
             
@@ -402,9 +447,9 @@ class GroupRecommendationSystem:
         
         return df.nlargest(k, 'score')
     
-    def generate_all_recommendations(self, k: int = 10, 
-                                    alpha: float = 0.4, beta: float = 0.5,
-                                    gamma: float = 0.1) -> pd.DataFrame:
+    def generate_all_recommendations(self, k: int = 10,
+                                    alpha: float = 0.3, beta: float = 0.2,
+                                    gamma: float = 0.5) -> pd.DataFrame:
         """
         Genera recomendaciones para TODOS los grupos.
         
@@ -486,7 +531,59 @@ class MetricsEvaluator:
     def calculate_avg_score(df_recs: pd.DataFrame) -> float:
         """Score promedio de recomendaciones"""
         return df_recs['score'].mean() if len(df_recs) > 0 else 0.0
-    
+
+    @staticmethod
+    def calculate_group_score_gini(df_recs: pd.DataFrame) -> float:
+        """
+        Coeficiente de Gini del score promedio de recomendación entre
+        grupos. 0 = equidad perfecta (todos los grupos reciben
+        recomendaciones de calidad similar), 1 = inequidad máxima
+        (unos pocos grupos concentran las mejores recomendaciones).
+        """
+        if len(df_recs) == 0:
+            return 0.0
+
+        group_scores = np.sort(
+            df_recs.groupby('group_id')['score'].mean().to_numpy()
+        )
+        n = len(group_scores)
+        total = group_scores.sum()
+
+        if n <= 1 or total == 0:
+            return 0.0
+
+        index = np.arange(1, n + 1)
+        return (2 * np.sum(index * group_scores) - (n + 1) * total) / (n * total)
+
+    @staticmethod
+    def calculate_score_gap_by_group_size(df_recs: pd.DataFrame, groups: dict) -> float:
+        """
+        Diferencia de score promedio entre el cuartil de grupos más
+        grandes (por n_members) y el cuartil de grupos más pequeños.
+        Un gap alto sugiere que el modelo favorece sistemáticamente a
+        grupos grandes/establecidos por sobre grupos nuevos o pequeños.
+        """
+        if len(df_recs) == 0:
+            return 0.0
+
+        group_avg = df_recs.groupby('group_id')['score'].mean().reset_index()
+        group_avg['n_members'] = group_avg['group_id'].map(
+            lambda gid: groups[gid]['n_members']
+        )
+
+        if group_avg['n_members'].nunique() < 4:
+            return 0.0
+
+        group_avg['size_bucket'] = pd.qcut(
+            group_avg['n_members'], q=4, duplicates='drop'
+        )
+        bucket_means = group_avg.groupby('size_bucket', observed=True)['score'].mean()
+
+        if len(bucket_means) < 2:
+            return 0.0
+
+        return float(bucket_means.iloc[-1] - bucket_means.iloc[0])
+
     @staticmethod
     def print_report(df_recs: pd.DataFrame, n_groups: int, n_topics: int):
         """Imprime reporte completo de métricas"""
@@ -537,7 +634,7 @@ class MetricsEvaluator:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def run_grs_pipeline(input_path: str, output_path: str,
-                    alpha: float = 0.4, beta: float = 0.5, gamma: float = 0.1,
+                    alpha: float = 0.3, beta: float = 0.2, gamma: float = 0.5,
                     k: int = 10, verbose: bool = True) -> Tuple[pd.DataFrame, dict]:
     """
     Ejecuta el pipeline GRS completo.
@@ -589,7 +686,10 @@ def run_grs_pipeline(input_path: str, output_path: str,
     all_topics = preprocessor.get_all_topics()
     topic_frequency = preprocessor.get_topic_frequency()
     articles_p1, articles_p2 = preprocessor.get_articles_by_period()
-    
+    topic_frequency_p1, topic_frequency_p2 = preprocessor.get_topic_frequency_by_period(
+        article_topics, articles_p1, articles_p2
+    )
+
     if verbose:
         print(f"  ✓ {len(all_topics):,} tópicos únicos")
         print(f"  ✓ Período 1: {len(articles_p1):,} artículos")
@@ -611,7 +711,10 @@ def run_grs_pipeline(input_path: str, output_path: str,
     if verbose:
         print("\n[5/6] Generando recomendaciones...")
     
-    grs = GroupRecommendationSystem(groups, all_topics, topic_frequency)
+    grs = GroupRecommendationSystem(
+        groups, all_topics, topic_frequency,
+        topic_frequency_p1, topic_frequency_p2,
+    )
     df_recs = grs.generate_all_recommendations(k=k, alpha=alpha, beta=beta, gamma=gamma)
     
     if verbose:

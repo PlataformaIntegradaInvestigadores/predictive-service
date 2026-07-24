@@ -109,6 +109,12 @@ class RecommendationService:
             )
         )
 
+        topic_frequency_p1, topic_frequency_p2 = (
+            preprocessor.get_topic_frequency_by_period(
+                article_topics, articles_p1, articles_p2
+            )
+        )
+
         identifier = GroupIdentifier(
             article_authors,
             article_topics
@@ -131,6 +137,8 @@ class RecommendationService:
             self.groups,
             self.all_topics,
             topic_frequency,
+            topic_frequency_p1,
+            topic_frequency_p2,
         )
 
         logger.info("Grupos persistentes: %d", len(self.groups))
@@ -255,7 +263,18 @@ class RecommendationService:
             "avg_score": float(
                 MetricsEvaluator.calculate_avg_score(
                     recommendations_df
-                ) 
+                )
+            ),
+            "fairness_gini": float(
+                MetricsEvaluator.calculate_group_score_gini(
+                    recommendations_df
+                )
+            ),
+            "fairness_score_gap_by_group_size": float(
+                MetricsEvaluator.calculate_score_gap_by_group_size(
+                    recommendations_df,
+                    self.groups,
+                )
             ),
             "n_recommendations": len(
                 recommendations_df
