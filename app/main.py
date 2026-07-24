@@ -1,26 +1,76 @@
-# backend/app/main.py
+import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1.endpoints import analytics 
+
+from app.api.v1.endpoints import analytics, recommendations
 from app.core.config import settings
+from app.services.recommendation_service import RecommendationService
+
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        app.state.recommendation_service = RecommendationService()
+        app.state.recommendation_service_error = None
+    except Exception as exc:
+        app.state.recommendation_service = None
+        app.state.recommendation_service_error = str(exc)
+        logger.warning(
+            "No se pudo inicializar RecommendationService: %s", exc
+        )
+
+    yield
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json"
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    lifespan=lifespan,
 )
+
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS] + ["http://localhost:4200"],
+    allow_origins=[
+        str(origin)
+        for origin in settings.BACKEND_CORS_ORIGINS
+    ] + [
+        "http://localhost:4200",
+        "http://127.0.0.1:4200"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Aquí incluimos el router que importamos correctamente
-app.include_router(analytics.api_router, prefix=settings.API_V1_STR)
+
+# Router original de Centinela
+app.include_router(
+    analytics.api_router,
+    prefix=settings.API_V1_STR,
+)
+
+# Router nuevo del GRS
+app.include_router(
+    recommendations.router,
+    prefix=settings.API_V1_STR
+)
+
 
 @app.get("/")
 def read_root():
-    return {"message": "Bienvenido al API del Centinela Predictivo de Publicaciones Científicas"}
+    return {
+        "message": (
+            "Bienvenido al API del Centinela Predictivo "
+            "de Publicaciones Científicas"
+        )
+    }
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}

@@ -17,6 +17,13 @@ class Settings(BaseSettings):
         "https://centinela.epn.edu.ec"
     ]
 
+    # Períodos usados por el GRS para identificar grupos persistentes.
+    # Ajustar vía .env a medida que pase el tiempo, en vez de hardcodear en el código.
+    GRS_PERIOD1_START: int = 2020
+    GRS_PERIOD1_END: int = 2022
+    GRS_PERIOD2_START: int = 2023
+    GRS_PERIOD2_END: int = 2025
+
     class Config:
         case_sensitive = True
         env_file = ".env"

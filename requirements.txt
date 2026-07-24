@@ -22,3 +22,6 @@ python-dotenv
 pytest==7.4.3
 httpx==0.25.2
 pytest-cov==4.1.0
+
+# GRS: usado directamente por MetricsEvaluator.calculate_diversity
+scipy
