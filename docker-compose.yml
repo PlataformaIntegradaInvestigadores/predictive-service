@@ -6,6 +6,8 @@ services:
       - "8003:8003"
     env_file:
       - .env
+    volumes:
+      - ./data:/app/data:ro
     restart: unless-stopped
     networks:
       - centinela-net

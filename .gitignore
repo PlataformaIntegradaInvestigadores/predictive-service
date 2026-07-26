@@ -231,3 +231,6 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+# Datos y archivos locales del GRS
+data/*
+!data/README.md
