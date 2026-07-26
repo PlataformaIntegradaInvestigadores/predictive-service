@@ -81,7 +81,7 @@ jobs:
   # ── Deploy staging ─────────────────────────────────────────────────────────
   deploy-staging:
     name: Deploy a servidor staging
-    runs-on: self-hosted
+    runs-on: [self-hosted, staging]
     needs: test-integration
     if: github.ref == 'refs/heads/staging'
     steps:
@@ -101,15 +101,15 @@ jobs:
           sleep 15
           HEALTHY=false
           for i in 1 2 3 4 5; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:8003/health || echo "000")
-            echo "Intento $i: HTTP $STATUS"
-            if [ "$STATUS" = "200" ] || [ "$STATUS" = "301" ] || [ "$STATUS" = "404" ]; then
+            RESPONSE=$(curl -s --max-time 5 http://localhost:8003/api/v1/recommendations/health || echo '{}')
+            echo "Intento $i: $RESPONSE"
+            if echo "$RESPONSE" | grep -q '"service_initialized":[[:space:]]*true'; then
               HEALTHY=true; break
             fi
             sleep 6
           done
           if [ "$HEALTHY" = "false" ]; then
-            echo "Health check fallido — rollback"
+            echo "Health check fallido — el servicio respondio pero no se inicializo (revisar CENTINELA_DATA_PATH y la carpeta ./data en el servidor) — rollback"
             cd /opt/centinela/predictive_model_backend && git reset --hard HEAD~1
             cd /opt/centinela && docker compose up -d --build --no-deps predictive-backend
             exit 1
