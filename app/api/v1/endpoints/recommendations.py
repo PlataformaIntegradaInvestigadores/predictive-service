@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.services.recommendation_service import RecommendationService
 
@@ -12,6 +12,13 @@ router = APIRouter(
 
 class MembersRequest(BaseModel):
     scopus_ids: list[str]
+    
+    @field_validator("scopus_ids", mode="before")
+    @classmethod
+    def normalize_scopus_ids(cls, value):
+        if not isinstance(value, list):
+            raise ValueError("scopus_ids debe ser una lista")
+        return [str(scopus_id).strip() for scopus_id in value]
 
 
 def get_service(request: Request) -> RecommendationService:
