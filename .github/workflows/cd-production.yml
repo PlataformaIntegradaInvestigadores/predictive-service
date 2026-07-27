@@ -1,0 +1,101 @@
+name: "CD — predictive_model_backend → Producción"
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # ── Unitarios ────────────────────────────────────────────────────────────
+  test-unit:
+    name: Pruebas unitarias
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+          cache: pip
+      - name: Instalar dependencias del sistema
+        run: sudo apt-get install -y libgomp1
+      - name: Instalar dependencias Python
+        run: pip install -q -r requirements.txt pytest httpx pytest-cov
+      - name: Ejecutar tests unitarios
+        run: |
+          pytest tests/ -v --tb=short \
+            --ignore=tests/test_integration.py \
+            --junitxml=report-unit-prod.xml \
+            --cov=app --cov-report=term --cov-report=xml:coverage-unit-prod.xml
+      - name: Subir resultados
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-results-prod
+          path: |
+            report-unit-prod.xml
+            coverage-unit-prod.xml
+
+  # ── Integración ──────────────────────────────────────────────────────────
+  test-integration:
+    name: Pruebas de integración
+    runs-on: ubuntu-latest
+    needs: test-unit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+          cache: pip
+      - name: Instalar dependencias del sistema
+        run: sudo apt-get install -y libgomp1
+      - name: Instalar dependencias Python
+        run: pip install -q -r requirements.txt pytest httpx pytest-cov
+      - name: Ejecutar tests de integración
+        run: |
+          pytest tests/ -v --tb=short -m integration \
+            --junitxml=report-integration-prod.xml \
+            --cov=app --cov-report=term --cov-report=xml:coverage-integration-prod.xml
+      - name: Subir resultados
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-results-prod
+          path: |
+            report-integration-prod.xml
+            coverage-integration-prod.xml
+
+  # ── Deploy producción ───────────────────────────────────────────────────
+  deploy-production:
+    name: Deploy a servidor producción
+    runs-on: [self-hosted, production]
+    needs: test-integration
+    steps:
+      - name: Actualizar código
+        run: |
+          cd /opt/centinela/predictive_model_backend
+          git fetch origin main
+          git reset --hard origin/main
+
+      - name: Reconstruir contenedor
+        run: |
+          cd /opt/centinela
+          docker compose up -d --build --no-deps predictive-backend
+
+      - name: Health check con rollback automático
+        run: |
+          sleep 15
+          HEALTHY=false
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:8003/health || echo "000")
+            echo "Intento $i: HTTP $STATUS"
+            if [ "$STATUS" = "200" ] || [ "$STATUS" = "301" ] || [ "$STATUS" = "404" ]; then
+              HEALTHY=true; break
+            fi
+            sleep 6
+          done
+          if [ "$HEALTHY" = "false" ]; then
+            echo "Health check fallido — rollback al commit anterior"
+            cd /opt/centinela/predictive_model_backend && git reset --hard HEAD~1
+            cd /opt/centinela && docker compose up -d --build --no-deps predictive-backend
+            exit 1
+          fi
+          echo "Deploy exitoso — predictive_model_backend en producción"
