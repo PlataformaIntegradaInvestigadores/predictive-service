@@ -3,14 +3,18 @@ services:
     build: .
     container_name: predictive_backend
     ports:
-      - "8003:8003"
+      - "127.0.0.1:8003:8003"
     env_file:
       - .env
     volumes:
       - ./data:/app/data:ro
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     networks:
-      - centinela-net
+      centinela-net:
+        aliases:
+          - predictive-backend
 
 networks:
   centinela-net:
