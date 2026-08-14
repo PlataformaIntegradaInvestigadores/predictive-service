@@ -11,10 +11,12 @@ class Settings(BaseSettings):
     """
     PROJECT_NAME: str = "Centinela Predictivo de Publicaciones Científicas"
     API_V1_STR: str = "/api/v1"
+    DEBUG: bool = False
+    ALLOWED_HOSTS: List[str] = ["*"]
 
-    
-    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = [
-        "https://centinela.epn.edu.ec"
+    BACKEND_CORS_ORIGINS: List[str] = [
+        "http://localhost:8082",
+        "http://127.0.0.1:8082"
     ]
 
     # Períodos usados por el GRS para identificar grupos persistentes.
