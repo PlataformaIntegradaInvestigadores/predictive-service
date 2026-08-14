@@ -12,7 +12,9 @@ services:
     volumes:
       - ./data:/app/data:ro
     networks:
-      - centinela-net
+      centinela-net:
+        aliases:
+          - predictive-backend
 
 networks:
   centinela-net:
