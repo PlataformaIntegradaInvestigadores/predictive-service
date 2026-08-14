@@ -234,3 +234,6 @@ __marimo__/
 # Datos y archivos locales del GRS
 data/*
 !data/README.md
+
+# Agent configuration (local only, not committed)
+AGENTS.md
