@@ -1,6 +1,6 @@
 # backend/app/api/v1/endpoints/analytics.py
 
-from __future__ import annotations
+from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -56,7 +56,7 @@ def get_projection(
     projection_years: int = Query(
         5, ge=1, le=20, description="Número de años a proyectar."
     ),
-    hypothetical_authors: int | None = Query(
+    hypothetical_authors: Optional[int] = Query(
         None, description="Número hipotético de autores para análisis 'What If'."
     ),
     service: PredictionService = Depends(get_prediction_service),
