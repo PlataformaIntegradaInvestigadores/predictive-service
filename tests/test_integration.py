@@ -1,7 +1,8 @@
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import numpy as np
 import pandas as pd
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -26,15 +27,20 @@ def mock_prediction_service():
     service.model.predict = MagicMock(return_value=np.array([55.0]))
     service.model.feature_importances_ = np.array([0.25, 0.35, 0.30, 0.10])
     service.model.feature_name_ = [
-        "year", "affiliation_encoded", "publication_count", "distinct_authors"
+        "year",
+        "affiliation_encoded",
+        "publication_count",
+        "distinct_authors",
     ]
 
-    service.historical_df = pd.DataFrame({
-        "affiliation_name": ["MIT", "MIT", "Stanford", "Stanford", "EPN"],
-        "year": [2020, 2021, 2020, 2021, 2021],
-        "publication_count": [50, 60, 30, 35, 10],
-        "distinct_authors": [20, 25, 15, 18, 5],
-    })
+    service.historical_df = pd.DataFrame(
+        {
+            "affiliation_name": ["MIT", "MIT", "Stanford", "Stanford", "EPN"],
+            "year": [2020, 2021, 2020, 2021, 2021],
+            "publication_count": [50, 60, 30, 35, 10],
+            "distinct_authors": [20, 25, 15, 18, 5],
+        }
+    )
 
     return service
 
@@ -84,7 +90,9 @@ class TestProjectionEndpoint:
             assert "error" in data
 
     def test_get_projection_with_hypothetical_authors(self, client):
-        response = client.get("/api/v1/projection/MIT?projection_years=2&hypothetical_authors=50")
+        response = client.get(
+            "/api/v1/projection/MIT?projection_years=2&hypothetical_authors=50"
+        )
         assert response.status_code == 200
         data = response.json()
         predicted = [d for d in data["data"] if d["type"] == "predicted"]
@@ -107,7 +115,9 @@ class TestProjectionEndpoint:
 class TestCompareEndpoint:
     def test_post_compare_valid(self, client):
         payload = {"affiliation_names": ["MIT", "Stanford"]}
-        response = client.post("/api/v1/projection/compare?projection_years=3", json=payload)
+        response = client.post(
+            "/api/v1/projection/compare?projection_years=3", json=payload
+        )
         assert response.status_code == 200
         data = response.json()
         assert "results" in data
@@ -115,7 +125,9 @@ class TestCompareEndpoint:
 
     def test_post_compare_single_affiliation(self, client):
         payload = {"affiliation_names": ["EPN"]}
-        response = client.post("/api/v1/projection/compare?projection_years=2", json=payload)
+        response = client.post(
+            "/api/v1/projection/compare?projection_years=2", json=payload
+        )
         assert response.status_code == 200
         data = response.json()
         assert len(data["results"]) == 1

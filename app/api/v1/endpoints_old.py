@@ -1,16 +1,20 @@
 # backend/app/api/v1/endpoints.py
 
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import JSONResponse
+from pathlib import Path
+
 import joblib
 import pandas as pd
-from pathlib import Path
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import JSONResponse
+
 from app.models.schemas import (
-    PredictionRequest, PredictionResponse, ErrorResponse, 
-    AffiliationListResponse, ProjectionResponse, DataPoint
+    AffiliationListResponse,
+    DataPoint,
+    ErrorResponse,
+    PredictionRequest,
+    PredictionResponse,
+    ProjectionResponse,
 )
-import numpy as np
-from datetime import datetime
 
 # --- Creación del Router ---
 api_router = APIRouter()
@@ -21,17 +25,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 MODEL_PATH = BASE_DIR / "publication_model.pkl"
 ENCODER_PATH = BASE_DIR / "affiliation_encoder.pkl"
 # IMPORTANTE: Debes añadir tu archivo de datos históricos aquí.
-# Debe contener como mínimo las columnas: 'year', 'affiliation_name', 'publication_count', 'distinct_authors'
-HISTORICAL_DATA_PATH = BASE_DIR / "publication_data.csv" 
+# Debe contener como mínimo las columnas: 'year', 'affiliation_name',
+# 'publication_count', 'distinct_authors'
+HISTORICAL_DATA_PATH = BASE_DIR / "publication_data.csv"
 
 model = None
 encoder = None
 historical_df = None
 
+
 @api_router.on_event("startup")
 def load_assets():
     """
-    Carga todos los activos necesarios (modelo, encoder y datos históricos) 
+    Carga todos los activos necesarios (modelo, encoder y datos históricos)
     al iniciar la aplicación para optimizar el rendimiento.
     """
     global model, encoder, historical_df
@@ -39,7 +45,7 @@ def load_assets():
         model = joblib.load(MODEL_PATH)
         encoder = joblib.load(ENCODER_PATH)
         print("Modelo y encoder cargados exitosamente.")
-        
+
         # Cargar el DataFrame con los datos históricos
         historical_df = pd.read_csv(HISTORICAL_DATA_PATH)
         print("Datos históricos cargados exitosamente.")
@@ -50,13 +56,20 @@ def load_assets():
     except Exception as e:
         print(f"Ocurrió un error crítico al cargar los activos: {e}")
 
+
 def get_model_and_encoder():
     """Función de dependencia para verificar que los modelos están cargados."""
     if model is None or encoder is None or historical_df is None:
-        raise HTTPException(status_code=503, detail="El modelo o los datos no están disponibles. Revisa los logs del servidor.")
+        raise HTTPException(
+            status_code=503,
+            detail="El modelo o los datos no están disponibles. "
+            "Revisa los logs del servidor.",
+        )
     return model, encoder, historical_df
 
+
 # --- Nuevos Endpoints de Analítica ---
+
 
 @api_router.get("/affiliations", response_model=AffiliationListResponse)
 def get_affiliations():
@@ -70,14 +83,22 @@ def get_affiliations():
     affiliation_list = enc.classes_.tolist()
     return AffiliationListResponse(affiliations=affiliation_list)
 
-@api_router.get("/projection/{affiliation_name}", response_model=ProjectionResponse, responses={404: {"model": ErrorResponse}})
+
+@api_router.get(
+    "/projection/{affiliation_name}",
+    response_model=ProjectionResponse,
+    responses={404: {"model": ErrorResponse}},
+)
 def get_projection(
-    affiliation_name: str, 
-    projection_years: int = Query(5, ge=1, le=20, description="Número de años a proyectar en el futuro.")
+    affiliation_name: str,
+    projection_years: int = Query(
+        5, ge=1, le=20, description="Número de años a proyectar en el futuro."
+    ),
 ):
     """
     NUEVO ENDPOINT
-    Devuelve los datos históricos y una proyección futura para una afiliación específica.
+    Devuelve los datos históricos y una proyección futura para una afiliación
+    específica.
     """
     mdl, enc, df = get_model_and_encoder()
 
@@ -85,52 +106,68 @@ def get_projection(
     if affiliation_name not in enc.classes_:
         return JSONResponse(
             status_code=404,
-            content={"error": f"La afiliación '{affiliation_name}' no fue encontrada."}
+            content={"error": f"La afiliación '{affiliation_name}' no fue encontrada."},
         )
 
     # 1. Filtrar datos históricos para la afiliación seleccionada
-    affiliation_df = df[df['affiliation_name'] == affiliation_name].sort_values('year')
+    affiliation_df = df[df["affiliation_name"] == affiliation_name].sort_values("year")
     if affiliation_df.empty:
-         return JSONResponse(
+        return JSONResponse(
             status_code=404,
-            content={"error": f"No hay datos históricos para la afiliación '{affiliation_name}'."}
+            content={
+                "error": f"No hay datos históricos para la afiliación "
+                f"'{affiliation_name}'."
+            },
         )
 
     historical_data = [
-        DataPoint(year=row['year'], publications=row['publication_count'], type='actual')
+        DataPoint(
+            year=row["year"], publications=row["publication_count"], type="actual"
+        )
         for index, row in affiliation_df.iterrows()
     ]
 
     # 2. Preparar para la proyección iterativa
     projection_data = []
     last_real_year_data = affiliation_df.iloc[-1]
-    
-    current_year = int(last_real_year_data['year'])
-    current_publications = int(last_real_year_data['publication_count'])
+
+    current_year = int(last_real_year_data["year"])
+    current_publications = int(last_real_year_data["publication_count"])
     # Asumimos que el número de autores se mantiene constante para la proyección
     # Esta es una simplificación que se podría mejorar.
-    current_authors = int(last_real_year_data['distinct_authors'])
-    
+    current_authors = int(last_real_year_data["distinct_authors"])
+
     affiliation_encoded = enc.transform([affiliation_name])[0]
 
     # 3. Realizar proyección iterativa para los próximos N años
-    for i in range(projection_years):
+    for _i in range(projection_years):
         predict_year = current_year + 1
-        
-        input_data = pd.DataFrame([[
-            predict_year,
-            affiliation_encoded,
-            current_publications, # Usamos el dato del año anterior (que puede ser real o ya predicho)
-            current_authors
-        ]], columns=['year', 'affiliation_encoded', 'publication_count', 'distinct_authors'])
+
+        input_data = pd.DataFrame(
+            [
+                [
+                    predict_year,
+                    affiliation_encoded,
+                    # Usamos el dato del año anterior (que puede ser real o ya predicho)
+                    current_publications,
+                    current_authors,
+                ]
+            ],
+            columns=[
+                "year",
+                "affiliation_encoded",
+                "publication_count",
+                "distinct_authors",
+            ],
+        )
 
         prediction = mdl.predict(input_data)
         predicted_pubs = round(prediction[0])
-        
+
         projection_data.append(
-            DataPoint(year=predict_year, publications=predicted_pubs, type='predicted')
+            DataPoint(year=predict_year, publications=predicted_pubs, type="predicted")
         )
-        
+
         # Actualizamos las variables para la siguiente iteración del bucle
         current_year = predict_year
         current_publications = predicted_pubs
@@ -142,7 +179,12 @@ def get_projection(
 
 # --- Endpoint de Predicción Simple (Existente, sin cambios) ---
 
-@api_router.post("/predict", response_model=PredictionResponse, responses={404: {"model": ErrorResponse}})
+
+@api_router.post(
+    "/predict",
+    response_model=PredictionResponse,
+    responses={404: {"model": ErrorResponse}},
+)
 def predict(request: PredictionRequest):
     """
     Endpoint para realizar una predicción simple para un único año.
@@ -155,19 +197,34 @@ def predict(request: PredictionRequest):
         except ValueError:
             return JSONResponse(
                 status_code=404,
-                content={"error": f"La afiliación '{request.affiliation_name}' no fue encontrada."}
+                content={
+                    "error": f"La afiliación '{request.affiliation_name}' "
+                    f"no fue encontrada."
+                },
             )
 
-        input_data = pd.DataFrame([[
-            request.year,
-            affiliation_encoded,
-            request.last_year_publications,
-            request.last_year_authors
-        ]], columns=['year', 'affiliation_encoded', 'publication_count', 'distinct_authors'])
+        input_data = pd.DataFrame(
+            [
+                [
+                    request.year,
+                    affiliation_encoded,
+                    request.last_year_publications,
+                    request.last_year_authors,
+                ]
+            ],
+            columns=[
+                "year",
+                "affiliation_encoded",
+                "publication_count",
+                "distinct_authors",
+            ],
+        )
 
         prediction = model.predict(input_data)
-        
+
         return PredictionResponse(predicted_publications=round(prediction[0]))
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ocurrió un error interno: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Ocurrió un error interno: {str(e)}"
+        ) from e

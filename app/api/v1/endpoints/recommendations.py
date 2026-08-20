@@ -3,7 +3,6 @@ from pydantic import BaseModel, field_validator
 
 from app.services.recommendation_service import RecommendationService
 
-
 router = APIRouter(
     prefix="/recommendations",
     tags=["recommendations"],
@@ -12,7 +11,7 @@ router = APIRouter(
 
 class MembersRequest(BaseModel):
     scopus_ids: list[str]
-    
+
     @field_validator("scopus_ids", mode="before")
     @classmethod
     def normalize_scopus_ids(cls, value):

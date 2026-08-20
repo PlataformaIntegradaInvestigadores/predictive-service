@@ -20,9 +20,7 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         app.state.recommendation_service = None
         app.state.recommendation_service_error = str(exc)
-        logger.warning(
-            "No se pudo inicializar RecommendationService: %s", exc
-        )
+        logger.warning("No se pudo inicializar RecommendationService: %s", exc)
 
     yield
 
@@ -41,13 +39,8 @@ app.add_middleware(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        str(origin)
-        for origin in settings.BACKEND_CORS_ORIGINS
-    ] + [
-        "http://localhost:4200",
-        "http://127.0.0.1:4200"
-    ],
+    allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS]
+    + ["http://localhost:4200", "http://127.0.0.1:4200"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,18 +54,14 @@ app.include_router(
 )
 
 # Router nuevo del GRS
-app.include_router(
-    recommendations.router,
-    prefix=settings.API_V1_STR
-)
+app.include_router(recommendations.router, prefix=settings.API_V1_STR)
 
 
 @app.get("/")
 def read_root():
     return {
         "message": (
-            "Bienvenido al API del Centinela Predictivo "
-            "de Publicaciones Científicas"
+            "Bienvenido al API del Centinela Predictivo " "de Publicaciones Científicas"
         )
     }
 
