@@ -215,7 +215,7 @@ class PredictionService:
         """
         importances = self.model.feature_importances_
         features = self.model.feature_name_
-        feature_importance_dict = dict(zip(features, importances, strict=False))
+        feature_importance_dict = dict(zip(features, importances))
 
         # Datos extraídos del notebook 'models_split_top_10.ipynb'
         performance = {
