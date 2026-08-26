@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
@@ -15,14 +16,16 @@ def mock_prediction_service():
         service = PredictionService()
 
     service.encoder = MagicMock()
-    service.encoder.classes_ = ["MIT", "Stanford", "EPN"]
+    service.encoder.classes_ = np.array(["MIT", "Stanford", "EPN"])
     service.encoder.transform = MagicMock(
-        side_effect=lambda names: [0, 1, 2][: len(names)]
+        side_effect=lambda names: np.array(
+            [list(service.encoder.classes_).index(n) for n in names]
+        )
     )
 
     service.model = MagicMock()
-    service.model.predict = MagicMock(return_value=[55.0])
-    service.model.feature_importances_ = [0.25, 0.35, 0.30, 0.10]
+    service.model.predict = MagicMock(return_value=np.array([55.0]))
+    service.model.feature_importances_ = np.array([0.25, 0.35, 0.30, 0.10])
     service.model.feature_name_ = [
         "year",
         "affiliation_encoded",
@@ -142,3 +145,13 @@ class TestAnalyticsEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert len(data["results"]) == 1
+
+    def test_post_compare_skips_error_affiliations(self, analytics_client):
+        payload = {"affiliation_names": ["MIT", "UnknownUniv"]}
+        response = analytics_client.post(
+            "/api/v1/projection/compare?projection_years=3", json=payload
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["results"]) == 1
+        assert data["results"][0]["affiliation_name"] == "MIT"
