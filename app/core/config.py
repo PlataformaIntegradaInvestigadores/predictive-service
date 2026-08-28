@@ -1,7 +1,7 @@
 # backend/app/core/config.py
 
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -24,10 +24,12 @@ class Settings(BaseSettings):
     GRS_PERIOD2_START: int = 2023
     GRS_PERIOD2_END: int = 2025
 
-    class Config:
-        case_sensitive = True
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(
+        case_sensitive=True,
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()
