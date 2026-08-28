@@ -10,14 +10,14 @@ jobs:
     name: Pruebas unitarias
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version: "3.11"
           cache: pip
       - name: Instalar dependencias del sistema
         run: sudo apt-get install -y libgomp1
-      - name: Instalar dependencias Python
+      - name: Instalar dependencias
         run: pip install -q -r requirements.txt pytest httpx pytest-cov
       - name: Ejecutar tests unitarios
         run: |
@@ -26,28 +26,28 @@ jobs:
             --junitxml=report-unit-prod.xml \
             --cov=app --cov-report=term --cov-report=xml:coverage-unit-prod.xml
       - name: Subir resultados
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: unit-test-results-prod
+          name: coverage-report-prod
           path: |
             report-unit-prod.xml
             coverage-unit-prod.xml
 
-  # ── Integración ──────────────────────────────────────────────────────────
+  # ── Integración ────────────────────────────────────────────────────────────
   test-integration:
     name: Pruebas de integración
     runs-on: ubuntu-latest
     needs: test-unit
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version: "3.11"
           cache: pip
       - name: Instalar dependencias del sistema
         run: sudo apt-get install -y libgomp1
-      - name: Instalar dependencias Python
+      - name: Instalar dependencias
         run: pip install -q -r requirements.txt pytest httpx pytest-cov
       - name: Ejecutar tests de integración
         run: |
@@ -55,19 +55,19 @@ jobs:
             --junitxml=report-integration-prod.xml \
             --cov=app --cov-report=term --cov-report=xml:coverage-integration-prod.xml
       - name: Subir resultados
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: integration-test-results-prod
+          name: coverage-report-prod
           path: |
             report-integration-prod.xml
             coverage-integration-prod.xml
 
-  # ── Deploy producción ───────────────────────────────────────────────────
+  # ── Deploy producción ────────────────────────────────────────────────────
   deploy-production:
     name: Deploy a servidor producción
     runs-on: [self-hosted, production]
-    needs: test-integration
+    needs: [test-unit, test-integration]
     steps:
       - name: Actualizar código
         run: |
@@ -78,7 +78,7 @@ jobs:
       - name: Reconstruir contenedor
         run: |
           cd /opt/centinela
-          docker compose up -d --build --no-deps predictive-backend
+          docker compose up -d --build --no-deps predictive-service
 
       - name: Health check con rollback automático
         run: |
@@ -95,7 +95,7 @@ jobs:
           if [ "$HEALTHY" = "false" ]; then
             echo "Health check fallido — rollback al commit anterior"
             cd /opt/centinela/predictive_model_backend && git reset --hard HEAD~1
-            cd /opt/centinela && docker compose up -d --build --no-deps predictive-backend
+            cd /opt/centinela && docker compose up -d --build --no-deps predictive-service
             exit 1
           fi
           echo "Deploy exitoso — predictive_model_backend en producción"
