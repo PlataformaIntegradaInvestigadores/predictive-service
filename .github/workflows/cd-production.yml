@@ -1,12 +1,13 @@
-name: 'CD — predictive_model_backend → Production'
+name: "CD — predictive_model_backend → Producción"
 
 on:
   push:
     branches: [main]
 
 jobs:
+  # ── Unitarios ────────────────────────────────────────────────────────────
   test-unit:
-    name: Unit tests (pytest)
+    name: Pruebas unitarias
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -14,17 +15,17 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - name: Install system dependencies
+      - name: Instalar dependencias del sistema
         run: sudo apt-get install -y libgomp1
-      - name: Install Python dependencies
+      - name: Instalar dependencias
         run: pip install -q -r requirements.txt pytest httpx pytest-cov
-      - name: Run unit tests
+      - name: Ejecutar tests unitarios
         run: |
           pytest tests/ -v --tb=short \
             --ignore=tests/test_integration.py \
             --junitxml=report-unit-prod.xml \
             --cov=app --cov-report=term --cov-report=xml:coverage-unit-prod.xml
-      - name: Upload coverage report
+      - name: Subir resultados
         uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -33,8 +34,9 @@ jobs:
             report-unit-prod.xml
             coverage-unit-prod.xml
 
+  # ── Integración ────────────────────────────────────────────────────────────
   test-integration:
-    name: Integration tests (pytest)
+    name: Pruebas de integración
     runs-on: ubuntu-latest
     needs: test-unit
     steps:
@@ -43,16 +45,16 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - name: Install system dependencies
+      - name: Instalar dependencias del sistema
         run: sudo apt-get install -y libgomp1
-      - name: Install Python dependencies
+      - name: Instalar dependencias
         run: pip install -q -r requirements.txt pytest httpx pytest-cov
-      - name: Run integration tests
+      - name: Ejecutar tests de integración
         run: |
           pytest tests/ -v --tb=short -m integration \
             --junitxml=report-integration-prod.xml \
             --cov=app --cov-report=term --cov-report=xml:coverage-integration-prod.xml
-      - name: Upload coverage report
+      - name: Subir resultados
         uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -61,38 +63,39 @@ jobs:
             report-integration-prod.xml
             coverage-integration-prod.xml
 
+  # ── Deploy producción ────────────────────────────────────────────────────
   deploy-production:
-    name: Deploy to production server
+    name: Deploy a servidor producción
     runs-on: [self-hosted, production]
     needs: [test-unit, test-integration]
     steps:
-      - name: Update code
+      - name: Actualizar código
         run: |
           cd /opt/centinela/predictive_model_backend
           git fetch origin main
           git reset --hard origin/main
 
-      - name: Rebuild container
+      - name: Reconstruir contenedor
         run: |
           cd /opt/centinela
           docker compose up -d --build --no-deps predictive-backend
 
-      - name: Health check with automatic rollback
+      - name: Health check con rollback automático
         run: |
           sleep 15
           HEALTHY=false
           for i in 1 2 3 4 5; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:8003/health || echo "000")
-            echo "Attempt $i: HTTP $STATUS"
+            echo "Intento $i: HTTP $STATUS"
             if [ "$STATUS" = "200" ] || [ "$STATUS" = "301" ] || [ "$STATUS" = "404" ]; then
               HEALTHY=true; break
             fi
             sleep 6
           done
           if [ "$HEALTHY" = "false" ]; then
-            echo "Health check failed — rolling back to previous commit"
+            echo "Health check fallido — rollback al commit anterior"
             cd /opt/centinela/predictive_model_backend && git reset --hard HEAD~1
             cd /opt/centinela && docker compose up -d --build --no-deps predictive-backend
             exit 1
           fi
-          echo "Deploy succeeded — predictive_model_backend is live in production"
+          echo "Deploy exitoso — predictive_model_backend en producción"
