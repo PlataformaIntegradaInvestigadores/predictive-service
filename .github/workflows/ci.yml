@@ -98,7 +98,7 @@ jobs:
       - name: Reconstruir contenedor
         run: |
           cd /opt/centinela
-          docker compose up -d --build --no-deps predictive-backend
+          docker compose up -d --build --no-deps predictive-service
 
       - name: Health check
         run: |
@@ -115,6 +115,6 @@ jobs:
           if [ "$HEALTHY" = "false" ]; then
             echo "Health check fallido — rollback"
             cd /opt/centinela/predictive_model_backend && git reset --hard HEAD~1
-            cd /opt/centinela && docker compose up -d --build --no-deps predictive-backend
+            cd /opt/centinela && docker compose up -d --build --no-deps predictive-service
             exit 1
           fi

@@ -2,9 +2,9 @@
 # docker compose --env-file .env_produccion -f docker-compose_produccion.yaml up -d
 
 services:
-  predictive_backend:
+  predictive-service:
     build: .
-    container_name: predictive_backend
+    container_name: predictive-service
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -16,7 +16,7 @@ services:
     networks:
       centinela-net:
         aliases:
-          - predictive-backend
+          - predictive-service
 
 networks:
   centinela-net:

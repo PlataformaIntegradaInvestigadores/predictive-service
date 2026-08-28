@@ -1,8 +1,8 @@
-# Centinela — predictive_model_backend
+# Centinela — predictive-service
 
 Backend FastAPI que predice el número de publicaciones científicas futuras de afiliaciones académicas, usando un modelo LightGBM Regressor pre-entrenado, y expone un sistema de recomendación de grupos de investigación (GRS) basado en coautoría histórica.
 
-Parte del org multi-repo `PlataformaIntegradaInvestigadores`. Servicio de solo lectura sobre datos y modelos pre-entrenados (no tiene base de datos propia); en producción se accede a través de `api-gateway`.
+Parte del org multi-repo `PlataformaIntegradaInvestigadores`. Servicio de solo lectura sobre datos y modelos pre-entrenados (no tiene base de datos propia); en producción se accede a través de `gateway-service`.
 
 ## Stack
 
