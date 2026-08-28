@@ -11,9 +11,9 @@ jobs:
     if: github.event_name == 'pull_request'
     uses: PlataformaIntegradaInvestigadores/.github/.github/workflows/branch-name.yml@main
 
-  # ── Unitarios ──────────────────────────────────────────────────────────────
-  test-unit:
-    name: Pruebas unitarias
+  # ── Tests ──────────────────────────────────────────────────────────────────
+  test:
+    name: Pruebas unitarias e integración
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -31,30 +31,6 @@ jobs:
             --ignore=tests/test_integration.py \
             --junitxml=report-unit.xml \
             --cov=app --cov-report=term --cov-report=xml:coverage-unit.xml --cov-fail-under=90
-      - name: Subir resultados
-        uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: coverage-report
-          path: |
-            report-unit.xml
-            coverage-unit.xml
-
-  # ── Integración ────────────────────────────────────────────────────────────
-  test-integration:
-    name: Pruebas de integración
-    runs-on: ubuntu-latest
-    needs: test-unit
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-      - name: Instalar dependencias del sistema
-        run: sudo apt-get install -y libgomp1
-      - name: Instalar dependencias
-        run: pip install -q -r requirements.txt pytest httpx pytest-cov
       - name: Ejecutar tests de integración
         run: |
           pytest tests/ -v --tb=short -m integration \
@@ -66,6 +42,8 @@ jobs:
         with:
           name: coverage-report
           path: |
+            report-unit.xml
+            coverage-unit.xml
             report-integration.xml
             coverage-integration.xml
 
@@ -73,7 +51,7 @@ jobs:
   build-docker:
     name: Build imagen Docker
     runs-on: ubuntu-latest
-    needs: [test-unit, test-integration]
+    needs: test
     if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v7
@@ -86,7 +64,7 @@ jobs:
   deploy-staging:
     name: Deploy a servidor staging
     runs-on: [self-hosted, staging]
-    needs: [test-unit, test-integration]
+    needs: test
     if: github.ref == 'refs/heads/develop'
     steps:
       - name: Actualizar codigo
