@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.v1.endpoints import analytics, recommendations
 from app.core.config import settings
@@ -68,4 +69,14 @@ def read_root():
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    service = getattr(app.state, "recommendation_service", None)
+    if service is None:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "error",
+                "service_initialized": False,
+                "error": getattr(app.state, "recommendation_service_error", None),
+            },
+        )
+    return {"status": "ok", "service_initialized": True}
