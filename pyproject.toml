@@ -6,10 +6,3 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.black]
 target-version = ["py39"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "-v --tb=short --cov=app --cov-report=term --cov-report=xml:coverage.xml --cov-fail-under=90"
-markers = [
-    "integration: marks tests as integration tests (run with -m integration)",
-]

@@ -1,7 +1,7 @@
 services:
-  predictive-service:
+  predictive_backend:
     build: .
-    container_name: predictive-service
+    container_name: predictive_backend
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -14,7 +14,7 @@ services:
     networks:
       centinela-net:
         aliases:
-          - predictive-service
+          - predictive-backend
 
 networks:
   centinela-net:
