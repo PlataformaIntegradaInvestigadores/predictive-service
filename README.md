@@ -1,215 +1,95 @@
-# Predictive Model Backend
+# Centinela — predictive_model_backend
 
-Este proyecto es un backend de FastAPI diseñado para predecir el número de publicaciones científicas de diversas afiliaciones académicas y de investigación. Utiliza un modelo de Machine Learning (LightGBM Regressor) pre-entrenado para ofrecer proyecciones, comparaciones y rankings.
+Backend FastAPI que predice el número de publicaciones científicas futuras de afiliaciones académicas, usando un modelo LightGBM Regressor pre-entrenado, y expone un sistema de recomendación de grupos de investigación (GRS) basado en coautoría histórica.
 
-## Tabla de Contenidos
+Parte del org multi-repo `PlataformaIntegradaInvestigadores`. Servicio de solo lectura sobre datos y modelos pre-entrenados (no tiene base de datos propia); en producción se accede a través de `api-gateway`.
 
-- [Predictive Model Backend](#predictive-model-backend)
-  - [Tabla de Contenidos](#tabla-de-contenidos)
-  - [Propósito del Proyecto](#propósito-del-proyecto)
-  - [Funcionamiento](#funcionamiento)
-  - [Instalación](#instalación)
-    - [Requisitos Previos](#requisitos-previos)
-    - [Configuración del Entorno](#configuración-del-entorno)
-  - [Uso](#uso)
-    - [Ejecución en Local](#ejecución-en-local)
-    - [Ejecución con Docker](#ejecución-con-docker)
-  - [Endpoints de la API](#endpoints-de-la-api)
-  - [Estructura del Repositorio](#estructura-del-repositorio)
+## Stack
 
-## Propósito del Proyecto
+- FastAPI + Uvicorn (ASGI)
+- LightGBM (modelo de predicción), scikit-learn, pandas, scipy
+- pydantic-settings (configuración por env vars)
 
-El objetivo principal de este backend es proporcionar una herramienta analítica que permita a los usuarios:
+## Estructura del proyecto
 
-- Obtener una lista de todas las afiliaciones de investigación disponibles en el conjunto de datos.
-- Visualizar la tendencia histórica de publicaciones de una afiliación específica.
-- Predecir el número futuro de publicaciones para una o varias afiliaciones.
-- Realizar análisis "What If" para estimar cómo cambios en el número de autores podrían impactar las publicaciones futuras.
-- Comparar las proyecciones de crecimiento entre múltiples afiliaciones.
-- Obtener un ranking de las afiliaciones con mayor crecimiento proyectado.
+```
+app/
+  api/v1/endpoints/
+    analytics.py         # Proyecciones, comparaciones, ranking, detalles del modelo
+    recommendations.py   # Sistema de recomendación de grupos (GRS)
+  core/config.py         # Configuración de la aplicación
+  grs/grs_production.py  # Lógica del sistema de recomendación de grupos
+  models/schemas.py      # Esquemas Pydantic
+  services/
+    prediction_service.py    # Carga el modelo/encoder/dataset y genera predicciones
+    recommendation_service.py
+  main.py
+publication_model.pkl        # Modelo LightGBM pre-entrenado
+affiliation_encoder.pkl      # Codificador de etiquetas de afiliaciones
+publication_data.csv         # Datos históricos de publicaciones
+preprocess_data.py           # Script de preprocesamiento de datos brutos (opcional)
+tests/
+```
 
-## Funcionamiento
+## Requisitos previos
 
-El núcleo del backend es el `PredictionService`, que se encarga de:
+- Docker y Docker Compose (recomendado), o Python 3.9+ si se corre sin Docker (versión fijada en el `Dockerfile`).
 
-1.  **Cargar los Activos**: Al iniciar, el servicio carga el modelo de Machine Learning (`publication_model.pkl`), el codificador de afiliaciones (`affiliation_encoder.pkl`) y el conjunto de datos históricos (`publication_data.csv`).
-2.  **Procesar Solicitudes**: La API, construida con FastAPI, recibe las solicitudes a través de diferentes endpoints definidos en `analytics.py`.
-3.  **Realizar Predicciones**: Para las proyecciones a futuro, el servicio utiliza el modelo pre-entrenado para predecir el número de publicaciones para los años solicitados, basándose en datos históricos como el número de publicaciones y autores del último año registrado.
-4.  **Devolver Resultados**: Los resultados se formatean según los esquemas definidos en `schemas.py` y se devuelven como respuestas JSON.
+## Levantar en local
 
-## Instalación
-
-Sigue estos pasos para configurar el proyecto en tu entorno local.
-
-### Requisitos Previos
-
-Asegúrate de tener instalado lo siguiente:
-
-- Python 3.11 o superior
-- `pip` (gestor de paquetes de Python)
-- Docker y Docker Compose (opcional, para despliegue en contenedores)
-
-### Configuración del Entorno
-
-1.  Clona el repositorio:
-    ```bash
-    git clone https://github.com/PlataformaIntegradaInvestigadores/predictive_model_backend.git
-    cd predictive_model_backend
-    ```
-
-2.  Crea y activa un entorno virtual (recomendado):
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # En Windows: venv\Scripts\activate
-    ```
-
-3.  Instala las dependencias:
-    Todas las dependencias necesarias se encuentran en el archivo `requirements.txt`.
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-## Uso
-
-### Ejecución en Local
-
-Para iniciar el servidor en tu máquina local, utiliza Uvicorn:
-
+### Con Docker (recomendado)
 ```bash
+docker compose up -d --build
+```
+La API queda disponible en `http://localhost:8003`.
+
+### Sin Docker (desarrollo)
+```bash
+python -m venv venv
+venv\Scripts\activate  # En Linux/Mac: source venv/bin/activate
+pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
 ```
 
-La API estará disponible en `http://localhost:8003`.
+## Variables de entorno
 
-### Ejecución con Docker
+Ver `.env.example` (desarrollo) / `.env_produccion.example` (Docker prod-like). Variables clave:
 
-El proyecto incluye un `Dockerfile` para facilitar el despliegue en contenedores.
+| Variable | Descripción |
+|---|---|
+| `CENTINELA_DATA_PATH` | Ruta dentro del contenedor a los CSV que usa el GRS (`articulos_ecuador_CLEAN.csv`, `autor_articulo_CLEAN.csv`, `topic_article_CLEAN.csv`) |
+| `BACKEND_CORS_ORIGINS` | Orígenes permitidos por CORS (lista de URLs) |
+| `GRS_PERIOD1_START` / `GRS_PERIOD1_END` | Rango del primer período usado por el GRS para identificar grupos persistentes de autores |
+| `GRS_PERIOD2_START` / `GRS_PERIOD2_END` | Rango del segundo período |
 
-1.  Construye la imagen de Docker:
-    ```bash
-    docker build -t predictive_model_backend .
-    ```
+## Tests
 
-2.  Ejecuta el contenedor:
-    ```bash
-    docker run -d -p 8003:8003 --name predictive_backend predictive_model_backend
-    ```
-
-La API estará disponible en `http://localhost:8003`.
-
-## Endpoints de la API
-
-La API ofrece los siguientes endpoints para interactuar con el modelo predictivo:
-
-- **`GET /`**: Endpoint raíz que devuelve un mensaje de bienvenida.
-
-- **`GET /api/v1/affiliations`**: Devuelve una lista completa de todos los nombres de afiliaciones disponibles para consulta.
-  - **Respuesta Exitosa (200):**
-    ```json
-    {
-      "affiliations": ["Universidad de Cuenca", "Universidad de Guayaquil", "..."]
-    }
-    ```
-
-- **`GET /api/v1/projection/{affiliation_name}`**: Obtiene la proyección histórica y futura para una afiliación específica.
-  - **Parámetros**:
-    - `affiliation_name` (string, path): Nombre de la afiliación.
-    - `projection_years` (int, query, opcional, por defecto: 5): Número de años a proyectar hacia el futuro.
-    - `hypothetical_authors` (int, query, opcional): Número hipotético de autores para un análisis "What If".
-  - **Respuesta Exitosa (200):**
-    ```json
-    {
-      "affiliation_name": "Universidad de Cuenca",
-      "data": [
-        {"year": 2020, "publications": 150, "type": "actual"},
-        {"year": 2021, "publications": 165, "type": "actual"},
-        {"year": 2022, "publications": 170, "type": "predicted"},
-        {"year": 2023, "publications": 175, "type": "predicted"}
-      ]
-    }
-    ```
-  - **Respuesta de Error (404):** Si la afiliación no se encuentra.
-    ```json
-    {"error": "La afiliación 'Nombre Inexistente' no fue encontrada."}
-    ```
-
-- **`POST /api/v1/projection/compare`**: Compara las proyecciones de una lista de afiliaciones.
-  - **Body**:
-    ```json
-    {
-      "affiliation_names": ["Universidad de Cuenca", "Universidad de Guayaquil"]
-    }
-    ```
-  - **Parámetros**:
-    - `projection_years` (int, query, opcional, por defecto: 5).
-  - **Respuesta Exitosa (200):**
-    ```json
-    {
-      "results": [
-        {
-          "affiliation_name": "Universidad de Cuenca",
-          "data": "[...]"
-        },
-        {
-          "affiliation_name": "Universidad de Guayaquil",
-          "data": "[...]"
-        }
-      ]
-    }
-    ```
-
-- **`GET /api/v1/ranking`**: Devuelve un ranking de afiliaciones basado en el crecimiento de publicaciones predicho para el próximo año.
-  - **Respuesta Exitosa (200):**
-    ```json
-    {
-      "ranking": [
-        {
-          "rank": 1,
-          "affiliation_name": "Universidad de Cuenca",
-          "current_year_publications": 165,
-          "predicted_next_year_publications": 175,
-          "growth": 10,
-          "growth_percentage": 6.06
-        }
-      ]
-    }
-    ```
-
-- **`GET /api/v1/model-details`**: Devuelve detalles y metadatos sobre el modelo de Machine Learning, incluyendo métricas de rendimiento y la importancia de las características.
-  - **Respuesta Exitosa (200):**
-    ```json
-    {
-      "model_type": "LightGBM Regressor",
-      "training_data_range": "Datos históricos hasta el año 2021",
-      "target_variable": "Número de publicaciones del año siguiente",
-      "total_affiliations": 2708,
-      "performance_metrics": {"mae": 2.20, "rmse": 4.67},
-      "feature_importances": {
-        "year": 120, "affiliation_encoded": 350, "..."
-      }
-    }
-    ```
-
-## Estructura del Repositorio
-
+```bash
+pytest --cov=app --cov-report=term
 ```
-.
-├── app/
-│   ├── api/
-│   │   └── v1/
-│   │       └── endpoints/
-│   │           └── analytics.py   # Define los endpoints de la API
-│   ├── core/
-│   │   └── config.py          # Configuración de la aplicación
-│   ├── models/
-│   │   └── schemas.py         # Define los esquemas Pydantic para la validación de datos
-│   ├── services/
-│   │   └── prediction_service.py # Lógica de negocio y predicciones
-│   └── main.py                # Punto de entrada de la aplicación FastAPI
-├── publication_model.pkl        # Modelo de ML pre-entrenado
-├── affiliation_encoder.pkl      # Codificador de etiquetas para las afiliaciones
-├── publication_data.csv         # Datos históricos de publicaciones
-├── preprocess_data.py           # Script para preprocesar los datos brutos (opcional)
-├── requirements.txt             # Dependencias de Python
-└── Dockerfile                   # Archivo para construir la imagen de Docker
-```
+
+Cobertura mínima exigida en CI: **90%** (`--cov-fail-under=90` en `.github/workflows/ci.yml`). Estado actual: ~90%.
+
+## API — Analytics (`/api/v1`)
+
+- **`GET /`** — mensaje de bienvenida.
+- **`GET /api/v1/affiliations`** — lista de nombres de afiliaciones disponibles.
+- **`GET /api/v1/projection/{affiliation_name}`** — proyección histórica y futura de una afiliación.
+  - Query: `projection_years` (int, default 5), `hypothetical_authors` (int, opcional, análisis "What If").
+  - 404 si la afiliación no existe.
+- **`POST /api/v1/projection/compare`** — compara proyecciones de varias afiliaciones (`affiliation_names: string[]`, query `projection_years`).
+- **`GET /api/v1/ranking`** — ranking de afiliaciones por crecimiento de publicaciones predicho para el próximo año.
+- **`GET /api/v1/model-details`** — metadatos del modelo: tipo, rango de entrenamiento, métricas (`mae`, `rmse`), importancia de features.
+
+## API — Recomendación de grupos (`/api/v1/recommendations`)
+
+Sistema GRS (Group Recommendation System) sobre coautoría histórica entre dos períodos configurables (`GRS_PERIOD*`). Ver `app/api/v1/endpoints/recommendations.py` para el contrato completo (listado de grupos, recomendaciones por grupo, recomendaciones por miembros, métricas de diversidad).
+
+## CI/CD
+
+GitHub Actions (`.github/workflows/ci.yml`): tests unitarios → build de imagen Docker → deploy automático a staging (`develop` branch, runner self-hosted `ticcd`) con healthcheck y rollback automático.
+
+## Convenciones
+
+- Branches: `feature/*` → `develop`, `hotfix/*` → `main`.
+- Commits: [Conventional Commits](https://www.conventionalcommits.org/), inglés, con el *por qué* en el cuerpo.
