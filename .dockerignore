@@ -84,6 +84,14 @@ docs/
 *.ipynb
 .ipynb_checkpoints
 
+# Modelos de ML locales (no usados por este servicio, no deben viajar al build)
+*.bin
+*.pt
+*.gguf
+*.safetensors
+*.onnx
+*.h5
+
 # Temporary files
 *.tmp
 *.temp
