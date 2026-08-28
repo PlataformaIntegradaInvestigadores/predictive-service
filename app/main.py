@@ -71,12 +71,11 @@ def read_root():
 def health():
     service = getattr(app.state, "recommendation_service", None)
     if service is None:
+        error = getattr(app.state, "recommendation_service_error", None)
+        if error:
+            logger.error("Health check: recommendation service unavailable: %s", error)
         return JSONResponse(
             status_code=503,
-            content={
-                "status": "error",
-                "service_initialized": False,
-                "error": getattr(app.state, "recommendation_service_error", None),
-            },
+            content={"status": "error", "service_initialized": False},
         )
     return {"status": "ok", "service_initialized": True}
