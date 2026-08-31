@@ -70,6 +70,10 @@ pytest --cov=app --cov-report=term
 
 Cobertura mínima exigida en CI: **90%** (`--cov-fail-under=90` en `.github/workflows/ci.yml`). Estado actual: ~90%.
 
+## Documentación (Swagger)
+
+Schema OpenAPI (autogenerado por FastAPI): `GET /api/v1/openapi.json`. UI local propia en `/docs`. Centralizado también en el hub del `gateway-service`: `/api/docs/v1/predictive`. `custom_openapi()` en `app/main.py` recorta el prefijo interno `/api/v1` y declara `servers: [{"url": "/api/predictive"}]` para que "Try it out" funcione a través del gateway. `/` y `/health` quedan fuera del schema (`include_in_schema=False`).
+
 ## API — Analytics (`/api/v1`)
 
 - **`GET /`** — mensaje de bienvenida.
