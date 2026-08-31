@@ -44,6 +44,15 @@ def test_root_returns_welcome_message():
     assert "message" in data
 
 
+def test_openapi_schema_uses_gateway_prefix():
+    response = client.get("/api/v1/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+    assert schema["servers"] == [{"url": "/api/predictive", "description": "Gateway"}]
+    assert "/health" not in schema["paths"]
+    assert all(not path.startswith("/api/v1") for path in schema["paths"])
+
+
 def test_affiliations_returns_503_without_model():
     response = client.get("/api/v1/affiliations")
     assert response.status_code == 503
@@ -77,7 +86,9 @@ def test_health_returns_ok_with_model(monkeypatch):
 
 
 def test_lifespan_handles_recommendation_service_failure():
-    with patch("app.main.RecommendationService", side_effect=RuntimeError("init failed")):
+    with patch(
+        "app.main.RecommendationService", side_effect=RuntimeError("init failed")
+    ):
         test_app = FastAPI(lifespan=lifespan)
         with TestClient(test_app) as client:
             response = client.get("/")

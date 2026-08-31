@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
 from app.api.v1.endpoints import analytics, recommendations
@@ -58,7 +59,27 @@ app.include_router(
 app.include_router(recommendations.router, prefix=settings.API_V1_STR)
 
 
-@app.get("/")
+def custom_openapi():
+    """Recorta el prefijo interno del spec y fija la ruta publica detras del
+    gateway (nginx.conf: /api/predictive/ -> /api/v1/), para que "Try it out"
+    en Swagger UI pegue a la URL real."""
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
+    prefix = settings.API_V1_STR
+    schema["paths"] = {
+        (path[len(prefix) :] if path.startswith(prefix) else path): item
+        for path, item in schema.get("paths", {}).items()
+    }
+    schema["servers"] = [{"url": "/api/predictive", "description": "Gateway"}]
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
+
+
+@app.get("/", include_in_schema=False)
 def read_root():
     return {
         "message": (
@@ -67,7 +88,7 @@ def read_root():
     }
 
 
-@app.get("/health")
+@app.get("/health", include_in_schema=False)
 def health():
     service = getattr(app.state, "recommendation_service", None)
     if service is None:
