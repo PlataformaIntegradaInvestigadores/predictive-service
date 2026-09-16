@@ -1,4 +1,5 @@
 import logging
+import socket
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -88,15 +89,36 @@ def read_root():
     }
 
 
+def _local_ip() -> str:
+    try:
+        return socket.gethostbyname(socket.gethostname())
+    except OSError:
+        return "unknown"
+
+
 @app.get("/health", include_in_schema=False)
 def health():
     service = getattr(app.state, "recommendation_service", None)
-    if service is None:
+    ok = service is not None
+    if not ok:
         error = getattr(app.state, "recommendation_service_error", None)
         if error:
             logger.error("Health check: recommendation service unavailable: %s", error)
-        return JSONResponse(
-            status_code=503,
-            content={"status": "error", "service_initialized": False},
-        )
-    return {"status": "ok", "service_initialized": True}
+
+    payload = {
+        "server_name": "predictive-service",
+        "ip_address": _local_ip(),
+        "global_status": "Online" if ok else "Offline",
+        "groups": [
+            {
+                "group_name": "ML Model",
+                "group_status": "Operativo" if ok else "Caído",
+                "services": [
+                    {"name": "recommendation-model", "status": "ok" if ok else "error"}
+                ],
+            }
+        ],
+    }
+    if ok:
+        return payload
+    return JSONResponse(status_code=503, content=payload)

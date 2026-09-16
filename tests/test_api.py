@@ -75,14 +75,21 @@ def test_health_returns_503_without_model(monkeypatch):
     )
     response = client.get("/health")
     assert response.status_code == 503
-    assert response.json() == {"status": "error", "service_initialized": False}
+    body = response.json()
+    assert body["global_status"] == "Offline"
+    assert body["groups"][0]["services"][0]["status"] == "error"
 
 
 def test_health_returns_ok_with_model(monkeypatch):
     monkeypatch.setattr(app.state, "recommendation_service", MagicMock(), raising=False)
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "service_initialized": True}
+    body = response.json()
+    assert body["global_status"] == "Online"
+    assert body["groups"][0]["services"][0] == {
+        "name": "recommendation-model",
+        "status": "ok",
+    }
 
 
 def test_lifespan_handles_recommendation_service_failure():
