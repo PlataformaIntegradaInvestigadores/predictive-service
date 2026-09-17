@@ -111,11 +111,9 @@ def health():
         "global_status": "Online" if ok else "Offline",
         "groups": [
             {
-                "group_name": "ML Model",
+                "group_name": "Predicción y Recomendaciones",
                 "group_status": "Operativo" if ok else "Caído",
-                "services": [
-                    {"name": "recommendation-model", "status": "ok" if ok else "error"}
-                ],
+                "services": [{"name": "modelo-ml", "status": "ok" if ok else "error"}],
             }
         ],
     }

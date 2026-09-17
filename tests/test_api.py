@@ -77,7 +77,7 @@ def test_health_returns_503_without_model(monkeypatch):
     assert response.status_code == 503
     body = response.json()
     assert body["global_status"] == "Offline"
-    assert body["groups"][0]["services"][0]["status"] == "error"
+    assert body["groups"][0]["services"][0] == {"name": "modelo-ml", "status": "error"}
 
 
 def test_health_returns_ok_with_model(monkeypatch):
@@ -86,10 +86,7 @@ def test_health_returns_ok_with_model(monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["global_status"] == "Online"
-    assert body["groups"][0]["services"][0] == {
-        "name": "recommendation-model",
-        "status": "ok",
-    }
+    assert body["groups"][0]["services"][0] == {"name": "modelo-ml", "status": "ok"}
 
 
 def test_lifespan_handles_recommendation_service_failure():
