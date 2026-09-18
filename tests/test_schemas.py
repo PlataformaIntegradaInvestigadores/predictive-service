@@ -2,16 +2,16 @@ import pytest
 from pydantic import ValidationError
 
 from app.models.schemas import (
-    DataPoint,
-    ErrorResponse,
     AffiliationListResponse,
-    ProjectionResponse,
     ComparisonData,
     ComparisonResponse,
+    DataPoint,
+    ErrorResponse,
+    ModelDetailsResponse,
+    ModelPerformance,
+    ProjectionResponse,
     RankingItem,
     RankingResponse,
-    ModelPerformance,
-    ModelDetailsResponse,
 )
 
 

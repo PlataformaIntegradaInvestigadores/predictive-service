@@ -1,8 +1,15 @@
 [tool.ruff]
-target-version = "py311"
+target-version = "py39"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.black]
-target-version = ["py311"]
+target-version = ["py39"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short --cov=app --cov-report=term --cov-report=xml:coverage.xml"
+markers = [
+    "integration: marks tests as integration tests (run with -m integration)",
+]

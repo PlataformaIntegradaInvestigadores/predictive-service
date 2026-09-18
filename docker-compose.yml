@@ -1,20 +1,20 @@
 services:
-  predictive_backend:
+  predictive-service:
     build: .
-    container_name: predictive_backend
+    container_name: predictive-service
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "127.0.0.1:8003:8003"
     env_file:
       - .env
     volumes:
       - ./data:/app/data:ro
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
     networks:
       centinela-net:
         aliases:
-          - predictive-backend
+          - predictive-service
 
 networks:
   centinela-net:

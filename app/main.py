@@ -1,8 +1,12 @@
 import logging
+import socket
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.openapi.utils import get_openapi
+from fastapi.responses import JSONResponse
 
 from app.api.v1.endpoints import analytics, recommendations
 from app.core.config import settings
@@ -19,9 +23,7 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         app.state.recommendation_service = None
         app.state.recommendation_service_error = str(exc)
-        logger.warning(
-            "No se pudo inicializar RecommendationService: %s", exc
-        )
+        logger.warning("No se pudo inicializar RecommendationService: %s", exc)
 
     yield
 
@@ -34,14 +36,14 @@ app = FastAPI(
 
 
 app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=settings.ALLOWED_HOSTS,
+)
+
+app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        str(origin)
-        for origin in settings.BACKEND_CORS_ORIGINS
-    ] + [
-        "http://localhost:4200",
-        "http://127.0.0.1:4200"
-    ],
+    allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS]
+    + ["http://localhost:4200", "http://127.0.0.1:4200"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,22 +57,66 @@ app.include_router(
 )
 
 # Router nuevo del GRS
-app.include_router(
-    recommendations.router,
-    prefix=settings.API_V1_STR
-)
+app.include_router(recommendations.router, prefix=settings.API_V1_STR)
 
 
-@app.get("/")
+def custom_openapi():
+    """Recorta el prefijo interno del spec y fija la ruta publica detras del
+    gateway (nginx.conf: /api/predictive/ -> /api/v1/), para que "Try it out"
+    en Swagger UI pegue a la URL real."""
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
+    prefix = settings.API_V1_STR
+    schema["paths"] = {
+        (path[len(prefix) :] if path.startswith(prefix) else path): item
+        for path, item in schema.get("paths", {}).items()
+    }
+    schema["servers"] = [{"url": "/api/predictive", "description": "Gateway"}]
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
+
+
+@app.get("/", include_in_schema=False)
 def read_root():
     return {
         "message": (
-            "Bienvenido al API del Centinela Predictivo "
-            "de Publicaciones Científicas"
+            "Bienvenido al API del Centinela Predictivo " "de Publicaciones Científicas"
         )
     }
 
 
-@app.get("/health")
+def _local_ip() -> str:
+    try:
+        return socket.gethostbyname(socket.gethostname())
+    except OSError:
+        return "unknown"
+
+
+@app.get("/health", include_in_schema=False)
 def health():
-    return {"status": "ok"}
+    service = getattr(app.state, "recommendation_service", None)
+    ok = service is not None
+    if not ok:
+        error = getattr(app.state, "recommendation_service_error", None)
+        if error:
+            logger.error("Health check: recommendation service unavailable: %s", error)
+
+    payload = {
+        "server_name": "predictive-service",
+        "ip_address": _local_ip(),
+        "global_status": "Online" if ok else "Offline",
+        "groups": [
+            {
+                "group_name": "Predicción y Recomendaciones",
+                "group_status": "Operativo" if ok else "Caído",
+                "services": [{"name": "modelo-ml", "status": "ok" if ok else "error"}],
+            }
+        ],
+    }
+    if ok:
+        return payload
+    return JSONResponse(status_code=503, content=payload)

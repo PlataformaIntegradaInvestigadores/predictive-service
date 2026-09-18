@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import logging
+import os
 from pathlib import Path
 from typing import Any
 
-import logging
-import os
 import pandas as pd
 
 from app.core.config import settings
@@ -26,30 +26,20 @@ class RecommendationService:
         configured_path = data_path or os.getenv("CENTINELA_DATA_PATH")
 
         if not configured_path:
-            raise RuntimeError(
-                "No se configuró CENTINELA_DATA_PATH."
-            )
+            raise RuntimeError("No se configuró CENTINELA_DATA_PATH.")
 
         self.data_path = Path(configured_path).resolve()
 
         if not self.data_path.is_dir():
-            raise FileNotFoundError(
-                f"La carpeta de datos no existe: {self.data_path}"
-            )
+            raise FileNotFoundError(f"La carpeta de datos no existe: {self.data_path}")
 
         self._load_data()
         self._initialize_grs()
 
     def _load_data(self) -> None:
-        articles_path = (
-            self.data_path / "articulos_ecuador_CLEAN.csv"
-        )
-        author_article_path = (
-            self.data_path / "autor_articulo_CLEAN.csv"
-        )
-        topic_article_path = (
-            self.data_path / "topic_article_CLEAN.csv"
-        )
+        articles_path = self.data_path / "articulos_ecuador_CLEAN.csv"
+        author_article_path = self.data_path / "autor_articulo_CLEAN.csv"
+        topic_article_path = self.data_path / "topic_article_CLEAN.csv"
 
         required_files = [
             articles_path,
@@ -57,16 +47,11 @@ class RecommendationService:
             topic_article_path,
         ]
 
-        missing_files = [
-            str(path)
-            for path in required_files
-            if not path.is_file()
-        ]
+        missing_files = [str(path) for path in required_files if not path.is_file()]
 
         if missing_files:
             raise FileNotFoundError(
-                "Faltan archivos requeridos:\n"
-                + "\n".join(missing_files)
+                "Faltan archivos requeridos:\n" + "\n".join(missing_files)
             )
 
         self.articles = pd.read_csv(articles_path)
@@ -80,12 +65,8 @@ class RecommendationService:
         )
 
         logger.info("Artículos cargados: %d", len(self.articles))
-        logger.info(
-            "Relaciones autor-artículo: %d", len(self.author_article)
-        )
-        logger.info(
-            "Relaciones tópico-artículo: %d", len(self.topic_article)
-        )
+        logger.info("Relaciones autor-artículo: %d", len(self.author_article))
+        logger.info("Relaciones tópico-artículo: %d", len(self.topic_article))
 
     def _initialize_grs(self) -> None:
         preprocessor = DataPreprocessor(
@@ -100,13 +81,11 @@ class RecommendationService:
         self.all_topics = preprocessor.get_all_topics()
         topic_frequency = preprocessor.get_topic_frequency()
 
-        articles_p1, articles_p2 = (
-            preprocessor.get_articles_by_period(
-                period1_start=settings.GRS_PERIOD1_START,
-                period1_end=settings.GRS_PERIOD1_END,
-                period2_start=settings.GRS_PERIOD2_START,
-                period2_end=settings.GRS_PERIOD2_END,
-            )
+        articles_p1, articles_p2 = preprocessor.get_articles_by_period(
+            period1_start=settings.GRS_PERIOD1_START,
+            period1_end=settings.GRS_PERIOD1_END,
+            period2_start=settings.GRS_PERIOD2_START,
+            period2_end=settings.GRS_PERIOD2_END,
         )
 
         topic_frequency_p1, topic_frequency_p2 = (
@@ -115,23 +94,13 @@ class RecommendationService:
             )
         )
 
-        identifier = GroupIdentifier(
-            article_authors,
-            article_topics
-        )
+        identifier = GroupIdentifier(article_authors, article_topics)
 
-        groups_p1 = identifier.extract_groups_in_period(
-            articles_p1
-        )
+        groups_p1 = identifier.extract_groups_in_period(articles_p1)
 
-        groups_p2 = identifier.extract_groups_in_period(
-            articles_p2
-        )
+        groups_p2 = identifier.extract_groups_in_period(articles_p2)
 
-        self.groups = identifier.identify_persistent(
-            groups_p1,
-            groups_p2
-        )
+        self.groups = identifier.identify_persistent(groups_p1, groups_p2)
 
         self.grs = GroupRecommendationSystem(
             self.groups,
@@ -150,21 +119,15 @@ class RecommendationService:
         k: int = 10,
     ) -> dict[str, Any]:
         if group_id not in self.groups:
-            raise KeyError(
-                f"No existe el grupo con id {group_id}"
-            )
+            raise KeyError(f"No existe el grupo con id {group_id}")
 
-        recommendations_df = (
-            self.grs.recommend_for_group(
-                group_id=group_id,
-                k=k,
-            )
+        recommendations_df = self.grs.recommend_for_group(
+            group_id=group_id,
+            k=k,
         )
 
-        recommendations = (
-            recommendations_df
-            .reset_index(drop=True)
-            .to_dict(orient="records")
+        recommendations = recommendations_df.reset_index(drop=True).to_dict(
+            orient="records"
         )
 
         for rank, recommendation in enumerate(
@@ -216,7 +179,6 @@ class RecommendationService:
             "groups": groups_data,
         }
 
-
     def get_metrics(self, k: int = 10) -> dict[str, Any]:
         if getattr(self, "_metrics_k", None) != k:
             logger.info("Generando recomendaciones para métricas (k=%d)...", k)
@@ -235,40 +197,29 @@ class RecommendationService:
             "groups_persistent": len(self.groups),
             "topics_unique": len(self.all_topics),
             "novelty_rate": float(
-                MetricsEvaluator.calculate_novelty_rate(
-                    recommendations_df
-                ) * 100
+                MetricsEvaluator.calculate_novelty_rate(recommendations_df) * 100
             ),
             "new_vs_recent": float(
-                MetricsEvaluator.calculate_new_vs_recent(
-                    recommendations_df
-                ) * 100
+                MetricsEvaluator.calculate_new_vs_recent(recommendations_df) * 100
             ),
             "coverage": float(
                 MetricsEvaluator.calculate_coverage(
                     recommendations_df,
                     len(self.all_topics),
-                ) * 100
+                )
+                * 100
             ),
             "diversity": float(
-                MetricsEvaluator.calculate_diversity(
-                    recommendations_df
-                ) * 100
+                MetricsEvaluator.calculate_diversity(recommendations_df) * 100
             ),
             "avg_relevance": float(
-                MetricsEvaluator.calculate_avg_relevance(
-                    recommendations_df
-                ) 
+                MetricsEvaluator.calculate_avg_relevance(recommendations_df)
             ),
             "avg_score": float(
-                MetricsEvaluator.calculate_avg_score(
-                    recommendations_df
-                )
+                MetricsEvaluator.calculate_avg_score(recommendations_df)
             ),
             "fairness_gini": float(
-                MetricsEvaluator.calculate_group_score_gini(
-                    recommendations_df
-                )
+                MetricsEvaluator.calculate_group_score_gini(recommendations_df)
             ),
             "fairness_score_gap_by_group_size": float(
                 MetricsEvaluator.calculate_score_gap_by_group_size(
@@ -276,7 +227,5 @@ class RecommendationService:
                     self.groups,
                 )
             ),
-            "n_recommendations": len(
-                recommendations_df
-            ),
+            "n_recommendations": len(recommendations_df),
         }
