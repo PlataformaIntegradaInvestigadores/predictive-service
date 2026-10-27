@@ -28,8 +28,43 @@ async def lifespan(app: FastAPI):
     yield
 
 
+API_DESCRIPTION = """
+Servicio de **analítica predictiva y recomendación** de la plataforma Centinela.
+
+Tiene dos módulos:
+
+* **Analítica de publicaciones**: proyecta cuántos artículos publicará cada
+  afiliación en los próximos años con un modelo de Machine Learning entrenado
+  sobre el histórico de Scopus, y permite simular escenarios ("What If").
+* **Recomendación de tópicos**: identifica grupos de investigación persistentes
+  entre dos periodos y recomienda tópicos nuevos a cada grupo combinando
+  relevancia, señal colaborativa y novedad.
+
+### Cómo usarlo
+
+Detrás del gateway todas las rutas cuelgan de `/api/predictive`. Si el modelo
+o los datos no están cargados, los endpoints responden `503`.
+"""
+
+OPENAPI_TAGS = [
+    {
+        "name": "Analítica de publicaciones",
+        "description": "Proyecciones, comparaciones y ranking de producción "
+        "científica por afiliación.",
+    },
+    {
+        "name": "Recomendación de tópicos",
+        "description": "Grupos de investigación persistentes y tópicos "
+        "recomendados para cada uno.",
+    },
+]
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
+    summary="Proyección de publicaciones y recomendación de tópicos.",
+    description=API_DESCRIPTION,
+    version="1.0.0",
+    openapi_tags=OPENAPI_TAGS,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     lifespan=lifespan,
 )
@@ -66,7 +101,14 @@ def custom_openapi():
     en Swagger UI pegue a la URL real."""
     if app.openapi_schema:
         return app.openapi_schema
-    schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        summary=app.summary,
+        description=app.description,
+        tags=app.openapi_tags,
+        routes=app.routes,
+    )
     prefix = settings.API_V1_STR
     schema["paths"] = {
         (path[len(prefix) :] if path.startswith(prefix) else path): item
