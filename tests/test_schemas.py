@@ -3,7 +3,6 @@ from pydantic import ValidationError
 
 from app.models.schemas import (
     AffiliationListResponse,
-    ComparisonData,
     ComparisonResponse,
     DataPoint,
     ErrorResponse,
@@ -88,7 +87,7 @@ class TestProjectionResponse:
 
 class TestComparisonResponse:
     def test_valid(self):
-        item = ComparisonData(
+        item = ProjectionResponse(
             affiliation_name="Stanford",
             data=[DataPoint(year=2023, publications=50, type="actual")],
         )

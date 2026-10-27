@@ -65,6 +65,7 @@ app = FastAPI(
     description=API_DESCRIPTION,
     version="1.0.0",
     openapi_tags=OPENAPI_TAGS,
+    generate_unique_id_function=lambda route: route.name,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     lifespan=lifespan,
 )
@@ -95,6 +96,29 @@ app.include_router(
 app.include_router(recommendations.router, prefix=settings.API_V1_STR)
 
 
+_DEFAULT_RESPONSE_TEXT = {
+    "Successful Response": "Respuesta exitosa.",
+    "Validation Error": "Error de validación en los parámetros o el cuerpo "
+    "de la petición.",
+}
+
+
+def _localize(schema: dict) -> None:
+    """Traduce los textos por defecto de FastAPI y quita los `title`
+    autogenerados de propiedades y parámetros (repiten el nombre del campo
+    en inglés)."""
+    for item in schema.get("paths", {}).values():
+        for operation in item.values():
+            for response in operation.get("responses", {}).values():
+                text = response.get("description")
+                response["description"] = _DEFAULT_RESPONSE_TEXT.get(text, text)
+            for parameter in operation.get("parameters", []):
+                parameter.get("schema", {}).pop("title", None)
+    for definition in schema.get("components", {}).get("schemas", {}).values():
+        for prop in definition.get("properties", {}).values():
+            prop.pop("title", None)
+
+
 def custom_openapi():
     """Recorta el prefijo interno del spec y fija la ruta publica detras del
     gateway (nginx.conf: /api/predictive/ -> /api/v1/), para que "Try it out"
@@ -115,6 +139,7 @@ def custom_openapi():
         for path, item in schema.get("paths", {}).items()
     }
     schema["servers"] = [{"url": "/api/predictive", "description": "Gateway"}]
+    _localize(schema)
     app.openapi_schema = schema
     return app.openapi_schema
 
