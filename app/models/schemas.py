@@ -62,19 +62,20 @@ class ProjectionResponse(BaseModel):
 # --- Endpoint de Comparación ---
 
 
-class ComparisonData(BaseModel):
-    """Contiene los datos de proyección para una afiliación en la comparación."""
+class CompareRequest(BaseModel):
+    """Afiliaciones cuyas proyecciones se quieren comparar."""
 
-    affiliation_name: str = Field(..., description="Nombre de la afiliación.")
-    data: list[DataPoint] = Field(
-        ..., description="Serie histórica seguida de los años proyectados."
+    affiliation_names: list[str] = Field(
+        ...,
+        description="Lista de nombres de afiliaciones a comparar.",
+        examples=[["Escuela Politécnica Nacional", "Universidad de Cuenca"]],
     )
 
 
 class ComparisonResponse(BaseModel):
     """Respuesta para la comparación de proyecciones entre varias afiliaciones."""
 
-    results: list[ComparisonData] = Field(
+    results: list[ProjectionResponse] = Field(
         ...,
         description=(
             "Una proyección por afiliación encontrada. "

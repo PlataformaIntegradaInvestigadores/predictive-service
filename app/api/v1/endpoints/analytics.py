@@ -2,11 +2,12 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import JSONResponse
 
 from app.models.schemas import (
     AffiliationListResponse,
+    CompareRequest,
     ComparisonResponse,
     ErrorResponse,
     ModelDetailsResponse,
@@ -106,18 +107,10 @@ def get_projection(
     "/projection/compare",
     response_model=ComparisonResponse,
     summary="Comparar proyecciones de varias afiliaciones",
-    responses={
-        404: {"model": ErrorResponse, "description": "Afiliación no encontrada."},
-        **_MODEL_UNAVAILABLE,
-    },
+    responses={**_MODEL_UNAVAILABLE},
 )
 def get_comparison(
-    affiliation_names: list[str] = Body(
-        ...,
-        embed=True,
-        description="Lista de nombres de afiliaciones a comparar.",
-        examples=[["Escuela Politécnica Nacional", "Universidad de Cuenca"]],
-    ),
+    body: CompareRequest,
     projection_years: int = Query(
         5, ge=1, le=20, description="Número de años a proyectar."
     ),
@@ -126,7 +119,7 @@ def get_comparison(
     """Calcula la proyección de cada afiliación indicada. Las que no existen se
     omiten de `results` en lugar de fallar toda la petición."""
     results = []
-    for name in affiliation_names:
+    for name in body.affiliation_names:
         result = service.get_projection(name, projection_years)
         if "error" in result:
             continue
