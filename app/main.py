@@ -1,5 +1,7 @@
 import logging
 import socket
+import threading
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -15,11 +17,47 @@ from app.services.recommendation_service import RecommendationService
 logger = logging.getLogger(__name__)
 
 
+def _warm_up(service: RecommendationService) -> None:
+    """Runs in a background thread: a failure here must never take the API down.
+
+    The ranking goes first because it is cheap (~15 s) and the recommendation
+    precompute (~2 min) is CPU-bound and would slow it down if run concurrently.
+    """
+    # The app does not configure logging, so only uvicorn's logger reaches the
+    # container output; use it so the warm-up is observable.
+    server_log = logging.getLogger("uvicorn.error")
+    started = time.monotonic()
+    server_log.info("Precalentando ranking y recomendaciones en segundo plano")
+
+    try:
+        if analytics.prediction_service.check_assets_loaded():
+            analytics.prediction_service.get_ranking()
+            server_log.info("Ranking listo (%.1f s)", time.monotonic() - started)
+    except Exception:
+        logger.exception("Fallo el precálculo del ranking")
+
+    try:
+        service.warm_up(k=settings.GRS_PRECOMPUTE_K)
+        server_log.info(
+            "Recomendaciones listas, precalentamiento total %.1f s",
+            time.monotonic() - started,
+        )
+    except Exception:
+        logger.exception("Fallo el precálculo de recomendaciones")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
         app.state.recommendation_service = RecommendationService()
         app.state.recommendation_service_error = None
+        if settings.GRS_PRECOMPUTE_ON_STARTUP:
+            threading.Thread(
+                target=_warm_up,
+                args=(app.state.recommendation_service,),
+                name="grs-warm-up",
+                daemon=True,
+            ).start()
     except Exception as exc:
         app.state.recommendation_service = None
         app.state.recommendation_service_error = str(exc)

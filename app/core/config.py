@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     GRS_PERIOD2_START: int = 2023
     GRS_PERIOD2_END: int = 2025
 
+    # Calcula en segundo plano, al arrancar, las recomendaciones de todos los
+    # grupos para el k por defecto, de modo que /groups y /metrics respondan al
+    # instante en lugar de tardar minutos en la primera petición.
+    GRS_PRECOMPUTE_ON_STARTUP: bool = True
+    GRS_PRECOMPUTE_K: int = 10
+
     model_config = SettingsConfigDict(
         case_sensitive=True,
         env_file=".env",

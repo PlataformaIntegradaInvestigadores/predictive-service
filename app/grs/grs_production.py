@@ -14,6 +14,7 @@ Este módulo implementa el pipeline completo GRS:
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
+import threading
 import warnings
 from collections import defaultdict
 
@@ -343,6 +344,10 @@ class GroupRecommendationSystem:
         self.topic_frequency_p2 = topic_frequency_p2 or {}
         self.max_freq = max(topic_frequency.values()) if topic_frequency else 1
         self.similarities = SimilarityCalculator.compute_group_similarities(groups)
+        # Scoring every topic for a group is pure Python (~0.2 s per group) and the
+        # inputs never change after construction, so results are memoized.
+        self._recommendation_cache = {}
+        self._recommendation_lock = threading.Lock()
 
     def compute_relevance(self, topic: str) -> float:
         """
@@ -420,7 +425,36 @@ class GroupRecommendationSystem:
         gamma: float = 0.5,
     ) -> pd.DataFrame:
         """
-        Genera recomendaciones para un grupo específico.
+        Recomendaciones de un grupo, memoizadas por (grupo, k, pesos).
+
+        Devuelve una copia para que quien llama no pueda alterar la caché. Las
+        lecturas ya cacheadas no esperan el lock, así que no quedan detrás de un
+        cálculo en curso (p. ej. el precálculo de arranque).
+        """
+        key = (group_id, k, alpha, beta, gamma)
+
+        cached = self._recommendation_cache.get(key)
+        if cached is None:
+            with self._recommendation_lock:
+                cached = self._recommendation_cache.get(key)
+                if cached is None:
+                    cached = self._compute_recommendations(
+                        group_id, k=k, alpha=alpha, beta=beta, gamma=gamma
+                    )
+                    self._recommendation_cache[key] = cached
+
+        return cached.copy()
+
+    def _compute_recommendations(
+        self,
+        group_id: int,
+        k: int = 10,
+        alpha: float = 0.3,
+        beta: float = 0.2,
+        gamma: float = 0.5,
+    ) -> pd.DataFrame:
+        """
+        Genera recomendaciones para un grupo específico (sin caché).
 
         Score = (α × Relevancia + β × Colaborativo + γ × Novedad) / (α + β + γ)
 

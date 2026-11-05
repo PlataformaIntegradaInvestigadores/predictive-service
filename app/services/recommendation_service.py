@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -178,6 +179,20 @@ class RecommendationService:
             "displayed_groups": len(groups_data),
             "groups": groups_data,
         }
+
+    def warm_up(self, k: int = 10) -> None:
+        """Calcula (y deja en caché) las recomendaciones de todos los grupos.
+
+        Es lo más caro del servicio: sin esto, la primera petición a /groups o
+        /metrics paga el cálculo completo."""
+        started = time.monotonic()
+        logger.info(
+            "Precalculando recomendaciones (k=%d, %d grupos)...", k, len(self.groups)
+        )
+        self.get_metrics(k=k)
+        logger.info(
+            "Recomendaciones precalculadas en %.1f s", time.monotonic() - started
+        )
 
     def get_metrics(self, k: int = 10) -> dict[str, Any]:
         if getattr(self, "_metrics_k", None) != k:
