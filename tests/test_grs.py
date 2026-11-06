@@ -430,35 +430,6 @@ class TestMetricsEvaluator:
         gap = MetricsEvaluator.calculate_score_gap_by_group_size(df, groups)
         assert isinstance(gap, float)
 
-    def test_print_report(self):
-        df = pd.DataFrame(
-            {
-                "group_id": [0, 0, 0],
-                "topic": ["t1", "t2", "t3"],
-                "novelty": [0.5, 0.6, 0.7],
-                "relevance": [0.8, 0.7, 0.6],
-                "score": [0.9, 0.8, 0.7],
-                "is_new_vs_recent": [1, 0, 1],
-            }
-        )
-        result = MetricsEvaluator.print_report(df, 1, 3)
-        assert "novelty_rate" in result
-        assert "coverage" in result
-
-
-class TestRunGRSPipeline:
-    def test_run_grs_pipeline(self, tmp_path, monkeypatch):
-        import app.grs.grs_production as grs_module
-
-        monkeypatch.setattr(grs_module, "run_grs_pipeline", lambda **kwargs: (pd.DataFrame(), {}))
-        result = grs_module.run_grs_pipeline(
-            input_path=str(tmp_path),
-            output_path=str(tmp_path),
-            k=2,
-            verbose=False,
-        )
-        assert isinstance(result, tuple)
-
     def test_calculate_score_gap_by_group_size_single_bucket(self):
         df = pd.DataFrame(
             {

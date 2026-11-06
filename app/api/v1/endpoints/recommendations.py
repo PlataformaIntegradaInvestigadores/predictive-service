@@ -1,6 +1,9 @@
+from contextlib import contextmanager
+
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from pydantic import BaseModel, Field, field_validator
 
+from app.domain.errors import GroupNotFound
 from app.models.schemas import (
     ByMembersResponse,
     GroupRecommendations,
@@ -67,6 +70,18 @@ class MembersRequest(BaseModel):
         return [str(scopus_id).strip() for scopus_id in value]
 
 
+@contextmanager
+def _failures_as_http(message: str):
+    """Traduce los errores del servicio a HTTP: grupo inexistente -> 404 y
+    cualquier otro fallo -> 500 con `message` como prefijo del detalle."""
+    try:
+        yield
+    except GroupNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"{message}: {exc}") from exc
+
+
 def get_service(request: Request) -> RecommendationService:
     service = getattr(request.app.state, "recommendation_service", None)
 
@@ -126,16 +141,8 @@ def get_all_groups(
     """Devuelve los grupos de investigación persistentes (los que se mantienen
     entre los dos periodos analizados) junto con los `k` tópicos recomendados
     a cada uno."""
-    try:
-        return service.get_all_recommendations(
-            k=k,
-            limit=limit,
-        )
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error obteniendo grupos: {exc}",
-        ) from exc
+    with _failures_as_http("Error obteniendo grupos"):
+        return service.get_all_recommendations(k=k, limit=limit)
 
 
 @router.get(
@@ -164,21 +171,8 @@ def get_group_recommendations(
 ):
     """Devuelve los `k` tópicos con mayor puntaje para un grupo, ordenados por
     `rank`."""
-    try:
-        return service.get_group_recommendations(
-            group_id=group_id,
-            k=k,
-        )
-    except KeyError as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=str(exc),
-        ) from exc
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error generando recomendaciones: {exc}",
-        ) from exc
+    with _failures_as_http("Error generando recomendaciones"):
+        return service.get_group_recommendations(group_id=group_id, k=k)
 
 
 @router.post(
@@ -201,16 +195,8 @@ def get_recommendations_by_members(
     if group_id is None:
         return {"linked": False}
 
-    try:
-        recommendations = service.get_group_recommendations(
-            group_id=group_id,
-            k=k,
-        )
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error generando recomendaciones: {exc}",
-        ) from exc
+    with _failures_as_http("Error generando recomendaciones"):
+        recommendations = service.get_group_recommendations(group_id=group_id, k=k)
 
     return {"linked": True, **recommendations}
 
@@ -228,10 +214,5 @@ def get_metrics(
     """Evalúa la calidad de las recomendaciones de todos los grupos: novedad,
     cobertura, diversidad, relevancia y equidad (Gini). La primera llamada con
     un `k` nuevo es lenta porque genera todas las recomendaciones."""
-    try:
+    with _failures_as_http("Error calculando métricas"):
         return service.get_metrics(k=k)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error calculando métricas: {exc}",
-        ) from exc
