@@ -17,7 +17,12 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     ALLOWED_HOSTS: list[str] = ["*"]
 
-    BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:8082", "http://127.0.0.1:8082"]
+    BACKEND_CORS_ORIGINS: list[str] = [
+        "http://localhost:8082",
+        "http://127.0.0.1:8082",
+        "http://localhost:4200",
+        "http://127.0.0.1:4200",
+    ]
 
     # Carpeta con los CSV del GRS (articulos_ecuador_CLEAN.csv,
     # autor_articulo_CLEAN.csv y topic_article_CLEAN.csv).

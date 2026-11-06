@@ -24,6 +24,9 @@ class LightGbmPublicationModel:
 
     def __init__(self, model_path: Path, encoder_path: Path) -> None:
         self._model = joblib.load(model_path)
+        # Cada predicción es de una sola fila: el pool de hilos de OpenMP solo
+        # añade coste (2.7k predicciones del ranking: 22 s -> 6 s, mismo resultado).
+        self._model.set_params(n_jobs=1)
         encoder = joblib.load(encoder_path)
         self._affiliations = encoder.classes_.tolist()
         # LabelEncoder asigna a cada clase su posición en `classes_`.

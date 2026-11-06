@@ -82,6 +82,7 @@ class TestLightGbmPublicationModel:
     def test_prediction_matches_calling_the_pickled_model_directly(self, model):
         encoder = joblib.load(ENCODER)
         lgbm = joblib.load(MODEL)
+        lgbm.set_params(n_jobs=1)  # same result, without the OpenMP start-up cost
         name = model.affiliations()[0]
         row = pd.DataFrame(
             [[2022, encoder.transform([name])[0], 12, 5]],
@@ -94,6 +95,9 @@ class TestLightGbmPublicationModel:
         )
 
         assert model.predict_next(2022, name, 12, 5) == round(lgbm.predict(row)[0])
+
+    def test_single_row_predictions_do_not_use_a_thread_pool(self, model):
+        assert model._model.get_params()["n_jobs"] == 1
 
     def test_unknown_affiliation_is_rejected(self, model):
         with pytest.raises(KeyError):
