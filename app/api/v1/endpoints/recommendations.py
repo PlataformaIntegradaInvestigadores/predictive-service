@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from pydantic import BaseModel, Field, field_validator
 
+from app.application.recommendation_service import RecommendationService
 from app.domain.errors import GroupNotFound
 from app.models.schemas import (
     ByMembersResponse,
@@ -11,7 +12,6 @@ from app.models.schemas import (
     RecommendationMetrics,
     RecommendationServiceStatus,
 )
-from app.services.recommendation_service import RecommendationService
 
 router = APIRouter(
     prefix="/recommendations",

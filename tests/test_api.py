@@ -1,37 +1,9 @@
 from unittest.mock import MagicMock, patch
 
-import numpy as np
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.main import app, lifespan
-from app.services.prediction_service import PredictionService
-
-
-@pytest.fixture(autouse=True)
-def mock_prediction_service():
-    with patch.object(PredictionService, "_load_assets", return_value=None):
-        service = PredictionService()
-
-    service.encoder = MagicMock()
-    service.encoder.classes_ = np.array(["MIT", "Stanford", "EPN"])
-    service.encoder.transform = MagicMock(
-        side_effect=lambda names: np.array(
-            [list(service.encoder.classes_).tolist().index(n) for n in names]
-        )
-    )
-
-    service.model = MagicMock()
-    service.model.predict = MagicMock(return_value=np.array([55.0]))
-
-    service.historical_df = None
-    service._ranking_cache = None
-    service._ranking_cache_timestamp = 0
-
-    from app.api.v1.endpoints import analytics as analytics_module
-
-    analytics_module.prediction_service = service
 
 
 client = TestClient(app)
@@ -53,17 +25,20 @@ def test_openapi_schema_uses_gateway_prefix():
     assert all(not path.startswith("/api/v1") for path in schema["paths"])
 
 
-def test_affiliations_returns_503_without_model():
+def test_affiliations_returns_503_without_model(monkeypatch):
+    monkeypatch.setattr(app.state, "prediction_service", None, raising=False)
     response = client.get("/api/v1/affiliations")
     assert response.status_code == 503
 
 
-def test_ranking_returns_503_without_model():
+def test_ranking_returns_503_without_model(monkeypatch):
+    monkeypatch.setattr(app.state, "prediction_service", None, raising=False)
     response = client.get("/api/v1/ranking")
     assert response.status_code == 503
 
 
-def test_model_details_returns_503_without_model():
+def test_model_details_returns_503_without_model(monkeypatch):
+    monkeypatch.setattr(app.state, "prediction_service", None, raising=False)
     response = client.get("/api/v1/model-details")
     assert response.status_code == 503
 
@@ -91,7 +66,7 @@ def test_health_returns_ok_with_model(monkeypatch):
 
 def test_lifespan_handles_recommendation_service_failure():
     with patch(
-        "app.main.RecommendationService", side_effect=RuntimeError("init failed")
+        "app.main.build_recommendation_service", side_effect=RuntimeError("init failed")
     ):
         test_app = FastAPI(lifespan=lifespan)
         with TestClient(test_app) as client:
@@ -99,3 +74,20 @@ def test_lifespan_handles_recommendation_service_failure():
             assert response.status_code == 404
             assert test_app.state.recommendation_service is None
             assert test_app.state.recommendation_service_error == "init failed"
+
+
+def test_lifespan_keeps_serving_when_the_prediction_assets_fail(caplog):
+    with (
+        patch(
+            "app.main.build_prediction_service",
+            side_effect=FileNotFoundError("publication_model.pkl"),
+        ),
+        patch("app.main.build_recommendation_service", return_value=MagicMock()),
+        patch("app.main.settings.GRS_PRECOMPUTE_ON_STARTUP", False),
+    ):
+        test_app = FastAPI(lifespan=lifespan)
+        with caplog.at_level("ERROR"):
+            with TestClient(test_app):
+                assert test_app.state.prediction_service is None
+
+    assert "publication_model.pkl" in caplog.text

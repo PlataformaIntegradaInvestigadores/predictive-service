@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.grs.grs_production import (
+from app.domain.grs import (
     DataPreprocessor,
     DataValidator,
     GroupIdentifier,

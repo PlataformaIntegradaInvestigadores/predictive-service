@@ -6,15 +6,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.recommendation_service import RecommendationService
+from app.application.recommendation_service import GrsPeriods, RecommendationService
+from tests.fakes import FakeArticleRepository
 
 
 @pytest.fixture
 def mock_recommendation_service():
-    with patch.object(
-        RecommendationService, "_load_data"
-    ), patch.object(RecommendationService, "_initialize_grs"):
-        service = RecommendationService.__new__(RecommendationService)
+    service = RecommendationService(
+        FakeArticleRepository(), GrsPeriods(2020, 2022, 2023, 2025)
+    )
 
     service.groups = {
         0: {
@@ -51,7 +51,6 @@ def mock_recommendation_service():
         }
     )
     service._metrics_k = None
-    service._metrics_lock = threading.Lock()
 
     return service
 

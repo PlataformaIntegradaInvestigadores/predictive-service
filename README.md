@@ -13,17 +13,25 @@ Parte del org multi-repo `PlataformaIntegradaInvestigadores`. Servicio de solo l
 ## Estructura del proyecto
 
 ```
-app/
-  api/v1/endpoints/
+```
+app/                     # Arquitectura hexagonal: las dependencias apuntan hacia adentro
+  domain/
+    grs.py               # Algoritmo del sistema de recomendación de grupos (sin E/S)
+    errors.py            # AffiliationNotFound, GroupNotFound
+  application/           # Casos de uso; solo conocen los puertos
+    ports.py             # ArticleRepository, PublicationModel, PublicationHistory
+    prediction_service.py     # Proyección, ranking y detalles del modelo
+    recommendation_service.py # Grupos, recomendaciones y métricas
+  adapters/outbound/     # Implementaciones de los puertos
+    csv_article_repository.py # CSV del GRS
+    publication_assets.py     # Modelo LightGBM (.pkl) y datos históricos (CSV)
+  api/v1/endpoints/      # Adaptador de entrada (HTTP)
     analytics.py         # Proyecciones, comparaciones, ranking, detalles del modelo
     recommendations.py   # Sistema de recomendación de grupos (GRS)
+  models/schemas.py      # Esquemas Pydantic de la API
   core/config.py         # Configuración de la aplicación
-  grs/grs_production.py  # Lógica del sistema de recomendación de grupos
-  models/schemas.py      # Esquemas Pydantic
-  services/
-    prediction_service.py    # Carga el modelo/encoder/dataset y genera predicciones
-    recommendation_service.py
-  main.py
+  bootstrap.py           # Raíz de composición: elige adaptadores y los inyecta
+  main.py                # FastAPI, lifespan y OpenAPI
 publication_model.pkl        # Modelo LightGBM pre-entrenado
 affiliation_encoder.pkl      # Codificador de etiquetas de afiliaciones
 publication_data.csv         # Datos históricos de publicaciones

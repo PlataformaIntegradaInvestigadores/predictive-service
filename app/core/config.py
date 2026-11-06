@@ -1,6 +1,8 @@
 # backend/app/core/config.py
 
 
+from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +18,10 @@ class Settings(BaseSettings):
     ALLOWED_HOSTS: list[str] = ["*"]
 
     BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:8082", "http://127.0.0.1:8082"]
+
+    # Carpeta con los CSV del GRS (articulos_ecuador_CLEAN.csv,
+    # autor_articulo_CLEAN.csv y topic_article_CLEAN.csv).
+    CENTINELA_DATA_PATH: Optional[str] = None
 
     # Períodos usados por el GRS para identificar grupos persistentes.
     # Ajustar vía .env a medida que pase el tiempo, en vez de hardcodear en el código.

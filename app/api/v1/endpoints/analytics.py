@@ -2,9 +2,10 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
 
+from app.application.prediction_service import PredictionService
 from app.domain.errors import AffiliationNotFound
 from app.models.schemas import (
     AffiliationListResponse,
@@ -15,9 +16,7 @@ from app.models.schemas import (
     ProjectionResponse,
     RankingResponse,
 )
-from app.services.prediction_service import PredictionService
 
-# --- Creación del Router y Servicio ---
 api_router = APIRouter(tags=["Analítica de publicaciones"])
 
 _MODEL_UNAVAILABLE = {
@@ -33,23 +32,21 @@ _MODEL_UNAVAILABLE = {
         },
     }
 }
-# Instancia única del servicio para toda la aplicación
-prediction_service = PredictionService()
 
 
-def get_prediction_service():
+def get_prediction_service(request: Request) -> PredictionService:
     """
-    Función de dependencia de FastAPI.
-    Verifica que el servicio y sus activos se hayan cargado correctamente.
-    Si no, levanta un error 503 (Servicio No Disponible).
+    Dependencia de FastAPI: el servicio que `main.lifespan` dejó en `app.state`.
+    Si el modelo o los datos no se cargaron, levanta un error 503.
     """
-    if not prediction_service.check_assets_loaded():
+    service = getattr(request.app.state, "prediction_service", None)
+    if service is None:
         raise HTTPException(
             status_code=503,
             detail="El modelo o los datos no están disponibles. "
             "Revisa los logs del servidor.",
         )
-    return prediction_service
+    return service
 
 
 # --- Endpoints de Analítica ---

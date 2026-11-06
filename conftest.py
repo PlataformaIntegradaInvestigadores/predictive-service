@@ -14,6 +14,8 @@ def pytest_configure(config):
 
 data_dir = tempfile.mkdtemp(prefix="centinela-test-data-")
 os.environ["CENTINELA_DATA_PATH"] = data_dir
+# Each TestClient runs the lifespan; do not start the minutes-long warm-up in tests.
+os.environ["GRS_PRECOMPUTE_ON_STARTUP"] = "false"
 
 pd.DataFrame(
     {"scopus_id": [f"a{i}" for i in range(200)], "publication_date": ["2020-01-01"] * 200}

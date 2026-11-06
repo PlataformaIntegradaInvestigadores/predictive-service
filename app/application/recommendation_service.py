@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 import logging
-import os
 import threading
 import time
-from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import pandas as pd
 
-from app.core.config import settings
+from app.application.ports import ArticleRepository
 from app.domain.errors import GroupNotFound
-from app.grs.grs_production import (
+from app.domain.grs import (
     DataPreprocessor,
     DataValidator,
     GroupIdentifier,
@@ -22,47 +20,33 @@ from app.grs.grs_production import (
 logger = logging.getLogger(__name__)
 
 
+class GrsPeriods(NamedTuple):
+    """Años (inclusive) de los dos periodos con que se detectan grupos persistentes."""
+
+    period1_start: int
+    period1_end: int
+    period2_start: int
+    period2_end: int
+
+
 class RecommendationService:
-    """Adaptador entre FastAPI y el sistema GRS real."""
+    """Casos de uso de recomendación de tópicos a grupos de investigación."""
 
-    def __init__(self, data_path: str | None = None) -> None:
-        configured_path = data_path or os.getenv("CENTINELA_DATA_PATH")
-
-        if not configured_path:
-            raise RuntimeError("No se configuró CENTINELA_DATA_PATH.")
-
-        self.data_path = Path(configured_path).resolve()
+    def __init__(self, repository: ArticleRepository, periods: GrsPeriods) -> None:
+        self._periods = periods
         self._metrics_k: int | None = None
         self._metrics_df: pd.DataFrame | None = None
         self._metrics_lock = threading.Lock()
 
-        if not self.data_path.is_dir():
-            raise FileNotFoundError(f"La carpeta de datos no existe: {self.data_path}")
-
-        self._load_data()
+        self._load_data(repository)
         self._initialize_grs()
 
-    def _load_data(self) -> None:
-        articles_path = self.data_path / "articulos_ecuador_CLEAN.csv"
-        author_article_path = self.data_path / "autor_articulo_CLEAN.csv"
-        topic_article_path = self.data_path / "topic_article_CLEAN.csv"
+    def _load_data(self, repository: ArticleRepository) -> None:
+        dataset = repository.load()
 
-        required_files = [
-            articles_path,
-            author_article_path,
-            topic_article_path,
-        ]
-
-        missing_files = [str(path) for path in required_files if not path.is_file()]
-
-        if missing_files:
-            raise FileNotFoundError(
-                "Faltan archivos requeridos:\n" + "\n".join(missing_files)
-            )
-
-        self.articles = pd.read_csv(articles_path)
-        self.author_article = pd.read_csv(author_article_path)
-        self.topic_article = pd.read_csv(topic_article_path)
+        self.articles = dataset.articles
+        self.author_article = dataset.author_article
+        self.topic_article = dataset.topic_article
 
         DataValidator.validate(
             self.articles,
@@ -88,10 +72,7 @@ class RecommendationService:
         topic_frequency = preprocessor.get_topic_frequency()
 
         articles_p1, articles_p2 = preprocessor.get_articles_by_period(
-            period1_start=settings.GRS_PERIOD1_START,
-            period1_end=settings.GRS_PERIOD1_END,
-            period2_start=settings.GRS_PERIOD2_START,
-            period2_end=settings.GRS_PERIOD2_END,
+            **self._periods._asdict()
         )
 
         topic_frequency_p1, topic_frequency_p2 = (
