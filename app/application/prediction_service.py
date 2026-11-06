@@ -1,88 +1,29 @@
-# backend/app/services/prediction_service.py
-
 from __future__ import annotations
 
-import logging
 import time
-from pathlib import Path
 
-import joblib
-import pandas as pd
-
+from app.application.ports import PublicationHistory, PublicationModel
 from app.domain.errors import AffiliationNotFound
-
-logger = logging.getLogger(__name__)
 
 
 class PredictionService:
     """
-    Contiene toda la lógica de negocio para cargar modelos, datos
-    y realizar las predicciones y análisis.
+    Casos de uso de analítica: proyección histórica y futura, ranking de
+    crecimiento y detalles del modelo. No sabe de dónde salen el modelo ni los
+    datos: los recibe como puertos.
     """
 
     RANKING_CACHE_TTL_SECONDS = 3600
 
-    def __init__(self):
-        # Cargar todos los activos una sola vez al instanciar el servicio.
-        BASE_DIR = Path(__file__).resolve().parent.parent.parent
-        self.MODEL_PATH = BASE_DIR / "publication_model.pkl"
-        self.ENCODER_PATH = BASE_DIR / "affiliation_encoder.pkl"
-        self.HISTORICAL_DATA_PATH = BASE_DIR / "publication_data.csv"
-
-        self.model = None
-        self.encoder = None
-        self.historical_df = None
+    def __init__(self, model: PublicationModel, history: PublicationHistory) -> None:
+        self._model = model
+        self._history = history
         self._ranking_cache = None
         self._ranking_cache_timestamp = 0
-        self._load_assets()
-
-    def _load_assets(self):
-        """Método privado para cargar los archivos .pkl y .csv."""
-        try:
-            self.model = joblib.load(self.MODEL_PATH)
-            self.encoder = joblib.load(self.ENCODER_PATH)
-            self.historical_df = pd.read_csv(self.HISTORICAL_DATA_PATH)
-            logger.info("Servicio de predicción inicializado y activos cargados.")
-        except FileNotFoundError as exc:
-            logger.error(
-                "No se pudo inicializar PredictionService. Archivo no encontrado: %s",
-                exc.filename,
-            )
-        except Exception:
-            logger.exception("Error al cargar los activos de PredictionService")
-
-    def check_assets_loaded(self):
-        """Verifica si todos los activos necesarios están cargados."""
-        return not (
-            self.model is None or self.encoder is None or self.historical_df is None
-        )
 
     def get_all_affiliations(self) -> list[str]:
         """Devuelve la lista completa de nombres de afiliaciones."""
-        return self.encoder.classes_.tolist()
-
-    def _run_prediction(
-        self, year: int, affiliation_encoded: int, last_pubs: int, last_authors: int
-    ) -> int:
-        """Función interna para ejecutar el modelo."""
-        input_data = pd.DataFrame(
-            [[year, affiliation_encoded, last_pubs, last_authors]],
-            columns=[
-                "year",
-                "affiliation_encoded",
-                "publication_count",
-                "distinct_authors",
-            ],
-        )
-
-        prediction = self.model.predict(input_data)
-        return round(prediction[0])
-
-    def _affiliation_history(self, affiliation_name: str) -> pd.DataFrame:
-        """Filas históricas de una afiliación, de la más antigua a la más reciente."""
-        return self.historical_df[
-            self.historical_df["affiliation_name"] == affiliation_name
-        ].sort_values("year")
+        return self._model.affiliations()
 
     def get_projection(
         self,
@@ -96,12 +37,12 @@ class PredictionService:
 
         Lanza AffiliationNotFound si la afiliación no existe o no tiene historial.
         """
-        if affiliation_name not in self.encoder.classes_:
+        if affiliation_name not in self._model.affiliations():
             raise AffiliationNotFound(
                 f"La afiliación '{affiliation_name}' no fue encontrada."
             )
 
-        affiliation_df = self._affiliation_history(affiliation_name)
+        affiliation_df = self._history.for_affiliation(affiliation_name)
         if affiliation_df.empty:
             raise AffiliationNotFound(
                 f"No hay datos históricos para la afiliación '{affiliation_name}'."
@@ -132,16 +73,14 @@ class PredictionService:
         else:
             pubs_per_author_ratio = 1.0
 
-        affiliation_encoded = self.encoder.transform([affiliation_name])[0]
-
         for _ in range(projection_years):
             predict_year = current_year + 1
 
             authors_for_prediction = max(1, round(current_authors))
 
-            predicted_pubs = self._run_prediction(
+            predicted_pubs = self._model.predict_next(
                 predict_year,
-                affiliation_encoded,
+                affiliation_name,
                 current_publications,
                 authors_for_prediction,
             )
@@ -178,17 +117,15 @@ class PredictionService:
         all_affiliations = self.get_all_affiliations()
 
         for affiliation_name in all_affiliations:
-            affiliation_df = self._affiliation_history(affiliation_name)
+            affiliation_df = self._history.for_affiliation(affiliation_name)
             if not affiliation_df.empty:
                 last_real_year_data = affiliation_df.iloc[-1]
                 current_year = int(last_real_year_data["year"])
                 current_pubs = int(last_real_year_data["publication_count"])
                 current_authors = int(last_real_year_data["distinct_authors"])
 
-                affiliation_encoded = self.encoder.transform([affiliation_name])[0]
-
-                predicted_pubs = self._run_prediction(
-                    current_year + 1, affiliation_encoded, current_pubs, current_authors
+                predicted_pubs = self._model.predict_next(
+                    current_year + 1, affiliation_name, current_pubs, current_authors
                 )
 
                 growth = predicted_pubs - current_pubs
@@ -216,25 +153,8 @@ class PredictionService:
         return sorted_ranking
 
     def get_model_details(self) -> dict:
-        """
-        Devuelve metadatos sobre el modelo y los datos,
-        basado en los resultados del notebook de entrenamiento.
-        """
-        importances = self.model.feature_importances_
-        features = self.model.feature_name_
-        feature_importance_dict = dict(zip(features, importances))
-
-        # Datos extraídos del notebook 'models_split_top_10.ipynb'
-        performance = {
-            "mae": 2.20,  # Mean Absolute Error (MAE): 2.20
-            "rmse": 4.67,  # Root Mean Squared Error (RMSE): 4.67
-        }
-
+        """Metadatos del modelo más el número de afiliaciones que conoce."""
         return {
-            "model_type": "LightGBM Regressor",
-            "training_data_range": "Datos históricos hasta el año 2021",
-            "target_variable": "Número de publicaciones del año siguiente",
-            "total_affiliations": len(self.encoder.classes_),
-            "performance_metrics": performance,
-            "feature_importances": feature_importance_dict,
+            **self._model.describe(),
+            "total_affiliations": len(self._model.affiliations()),
         }

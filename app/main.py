@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import socket
 import threading
@@ -11,13 +13,17 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
 from app.api.v1.endpoints import analytics, recommendations
+from app.application.prediction_service import PredictionService
+from app.application.recommendation_service import RecommendationService
+from app.bootstrap import build_prediction_service, build_recommendation_service
 from app.core.config import settings
-from app.services.recommendation_service import RecommendationService
 
 logger = logging.getLogger(__name__)
 
 
-def _warm_up(service: RecommendationService) -> None:
+def _warm_up(
+    service: RecommendationService, prediction: PredictionService | None
+) -> None:
     """Runs in a background thread: a failure here must never take the API down.
 
     The ranking goes first because it is cheap (~15 s) and the recommendation
@@ -30,8 +36,8 @@ def _warm_up(service: RecommendationService) -> None:
     server_log.info("Precalentando ranking y recomendaciones en segundo plano")
 
     try:
-        if analytics.prediction_service.check_assets_loaded():
-            analytics.prediction_service.get_ranking()
+        if prediction is not None:
+            prediction.get_ranking()
             server_log.info("Ranking listo (%.1f s)", time.monotonic() - started)
     except Exception:
         logger.exception("Fallo el precálculo del ranking")
@@ -49,12 +55,18 @@ def _warm_up(service: RecommendationService) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        app.state.recommendation_service = RecommendationService()
+        app.state.prediction_service = build_prediction_service()
+    except Exception:
+        app.state.prediction_service = None
+        logger.exception("No se pudo inicializar PredictionService")
+
+    try:
+        app.state.recommendation_service = build_recommendation_service()
         app.state.recommendation_service_error = None
         if settings.GRS_PRECOMPUTE_ON_STARTUP:
             threading.Thread(
                 target=_warm_up,
-                args=(app.state.recommendation_service,),
+                args=(app.state.recommendation_service, app.state.prediction_service),
                 name="grs-warm-up",
                 daemon=True,
             ).start()

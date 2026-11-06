@@ -1,68 +1,22 @@
-from unittest.mock import MagicMock, patch
-
-import numpy as np
 import pandas as pd
 import pytest
 
 from app.domain.errors import AffiliationNotFound
-from app.services.prediction_service import PredictionService
+from tests.fakes import (
+    FakePublicationModel,
+    history_frame,
+    make_prediction_service,
+)
 
 
 @pytest.fixture
-def mock_service():
-    with patch.object(PredictionService, "_load_assets", return_value=None):
-        service = PredictionService()
-
-    service.encoder = MagicMock()
-    service.encoder.classes_ = np.array(["MIT", "Stanford", "EPN"])
-    service.encoder.transform = MagicMock(
-        side_effect=lambda names: np.array(
-            [list(service.encoder.classes_).index(n) for n in names]
-        )
-    )
-
-    service.model = MagicMock()
-    service.model.predict = MagicMock(return_value=np.array([55.0]))
-    service.model.feature_importances_ = np.array([0.25, 0.35, 0.30, 0.10])
-    service.model.feature_name_ = [
-        "year",
-        "affiliation_encoded",
-        "publication_count",
-        "distinct_authors",
-    ]
-
-    service.historical_df = pd.DataFrame(
-        {
-            "affiliation_name": ["MIT", "MIT", "Stanford", "Stanford", "EPN"],
-            "year": [2020, 2021, 2020, 2021, 2021],
-            "publication_count": [50, 60, 30, 35, 10],
-            "distinct_authors": [20, 25, 15, 18, 5],
-        }
-    )
-
-    return service
+def model():
+    return FakePublicationModel()
 
 
-class TestCheckAssetsLoaded:
-    def test_returns_false_when_model_is_none(self, mock_service):
-        mock_service.model = None
-        assert mock_service.check_assets_loaded() is False
-
-    def test_returns_false_when_encoder_is_none(self, mock_service):
-        mock_service.encoder = None
-        assert mock_service.check_assets_loaded() is False
-
-    def test_returns_false_when_dataframe_is_none(self, mock_service):
-        mock_service.historical_df = None
-        assert mock_service.check_assets_loaded() is False
-
-    def test_returns_true_when_all_loaded(self, mock_service):
-        assert mock_service.check_assets_loaded() is True
-
-    def test_returns_false_when_nothing_loaded(self):
-        with patch.object(PredictionService, "_load_assets", return_value=None):
-            service = PredictionService()
-        assert service.check_assets_loaded() is False
+@pytest.fixture
+def mock_service(model):
+    return make_prediction_service(model=model)
 
 
 class TestGetAllAffiliations:
@@ -102,9 +56,11 @@ class TestGetProjection:
         years = [p["year"] for p in predicted_points]
         assert years == [2022, 2023, 2024]
 
-    def test_model_predict_is_called(self, mock_service):
+    def test_model_predict_is_called_once_per_projected_year(
+        self, mock_service, model
+    ):
         mock_service.get_projection("MIT", 2)
-        assert mock_service.model.predict.called
+        assert [call[:2] for call in model.calls] == [(2022, "MIT"), (2023, "MIT")]
 
     def test_projection_with_hypothetical_authors(self, mock_service):
         result = mock_service.get_projection("MIT", 2, hypothetical_authors=100)
@@ -167,56 +123,49 @@ class TestGetModelDetails:
         assert "distinct_authors" in fi
 
 
-class TestLoadAssetsErrors:
-    def test_file_not_found_error(self):
-        with patch("app.services.prediction_service.joblib.load", side_effect=FileNotFoundError("missing.pkl")):
-            service = PredictionService()
-        assert service.model is None
-        assert service.encoder is None
-
-    def test_generic_exception(self):
-        with patch("app.services.prediction_service.joblib.load", side_effect=RuntimeError("boom")):
-            service = PredictionService()
-        assert service.model is None
-        assert service.encoder is None
-
-
 class TestGetProjectionEdgeCases:
     def test_raises_for_unknown_affiliation(self, mock_service):
         with pytest.raises(AffiliationNotFound, match="no fue encontrada"):
             mock_service.get_projection("UnknownUniversity", 3)
 
-    def test_raises_when_affiliation_not_in_encoder(self, mock_service):
-        mock_service.encoder.classes_ = np.array(["MIT"])
+    def test_raises_when_affiliation_not_known_by_the_model(self):
+        service = make_prediction_service(model=FakePublicationModel(["MIT"]))
         with pytest.raises(AffiliationNotFound):
-            mock_service.get_projection("Stanford", 3)
+            service.get_projection("Stanford", 3)
 
-    def test_raises_when_no_historical_data(self, mock_service):
-        mock_service.historical_df = pd.DataFrame(
-            {"affiliation_name": ["MIT"], "year": [2020], "publication_count": [10], "distinct_authors": [5]}
+    def test_raises_when_no_historical_data(self):
+        service = make_prediction_service(
+            history_frame_=pd.DataFrame(
+                {
+                    "affiliation_name": ["MIT"],
+                    "year": [2020],
+                    "publication_count": [10],
+                    "distinct_authors": [5],
+                }
+            )
         )
         with pytest.raises(AffiliationNotFound, match="No hay datos históricos"):
-            mock_service.get_projection("Stanford", 3)
+            service.get_projection("Stanford", 3)
 
-    def test_projection_with_zero_authors(self, mock_service):
-        mock_service.historical_df = pd.DataFrame(
-            {
-                "affiliation_name": ["MIT", "MIT"],
-                "year": [2020, 2021],
-                "publication_count": [10, 12],
-                "distinct_authors": [0, 0],
-            }
+    def test_projection_with_zero_authors(self):
+        service = make_prediction_service(
+            history_frame_=pd.DataFrame(
+                {
+                    "affiliation_name": ["MIT", "MIT"],
+                    "year": [2020, 2021],
+                    "publication_count": [10, 12],
+                    "distinct_authors": [0, 0],
+                }
+            )
         )
-        result = mock_service.get_projection("MIT", 2)
+        result = service.get_projection("MIT", 2)
         assert "affiliation_name" in result
 
 
 class TestGetRankingEdgeCases:
-    def test_returns_empty_for_empty_historical(self, mock_service):
-        mock_service.historical_df = pd.DataFrame(
-            {"affiliation_name": [], "year": [], "publication_count": [], "distinct_authors": []}
-        )
-        result = mock_service.get_ranking()
+    def test_returns_empty_for_empty_historical(self):
+        service = make_prediction_service(history_frame_=history_frame().iloc[0:0])
+        result = service.get_ranking()
         assert result == []
 
     def test_returns_cached_ranking(self, mock_service):
@@ -231,25 +180,3 @@ class TestGetModelDetailsEdgeCases:
         result = mock_service.get_model_details()
         assert "training_data_range" in result
         assert "target_variable" in result
-
-
-class TestLoadFailuresAreLogged:
-    def test_missing_file_is_logged_as_error(self, caplog):
-        with patch(
-            "app.services.prediction_service.joblib.load",
-            side_effect=FileNotFoundError(2, "missing", "missing.pkl"),
-        ):
-            with caplog.at_level("ERROR"):
-                PredictionService()
-
-        assert "missing.pkl" in caplog.text
-
-    def test_unexpected_error_is_logged_with_traceback(self, caplog):
-        with patch(
-            "app.services.prediction_service.joblib.load",
-            side_effect=RuntimeError("boom"),
-        ):
-            with caplog.at_level("ERROR"):
-                PredictionService()
-
-        assert "boom" in caplog.text

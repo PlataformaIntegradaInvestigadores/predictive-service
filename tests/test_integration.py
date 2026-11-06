@@ -1,48 +1,14 @@
-from unittest.mock import MagicMock, patch
-
-import numpy as np
-import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.prediction_service import PredictionService
+from tests.fakes import make_prediction_service
 
 
 @pytest.fixture
 def mock_prediction_service():
-    """Provide a fully-mocked PredictionService for integration tests."""
-    with patch.object(PredictionService, "_load_assets", return_value=None):
-        service = PredictionService()
-
-    service.encoder = MagicMock()
-    service.encoder.classes_ = np.array(["MIT", "Stanford", "EPN"])
-    service.encoder.transform = MagicMock(
-        side_effect=lambda names: np.array(
-            [list(service.encoder.classes_).index(n) for n in names]
-        )
-    )
-
-    service.model = MagicMock()
-    service.model.predict = MagicMock(return_value=np.array([55.0]))
-    service.model.feature_importances_ = np.array([0.25, 0.35, 0.30, 0.10])
-    service.model.feature_name_ = [
-        "year",
-        "affiliation_encoded",
-        "publication_count",
-        "distinct_authors",
-    ]
-
-    service.historical_df = pd.DataFrame(
-        {
-            "affiliation_name": ["MIT", "MIT", "Stanford", "Stanford", "EPN"],
-            "year": [2020, 2021, 2020, 2021, 2021],
-            "publication_count": [50, 60, 30, 35, 10],
-            "distinct_authors": [20, 25, 15, 18, 5],
-        }
-    )
-
-    return service
+    """PredictionService backed by in-memory ports."""
+    return make_prediction_service()
 
 
 @pytest.fixture

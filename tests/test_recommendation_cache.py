@@ -11,10 +11,10 @@ import pandas as pd
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.grs.grs_production import GroupRecommendationSystem
-from app.api.v1.endpoints import analytics
+from app.application.recommendation_service import GrsPeriods, RecommendationService
+from app.domain.grs import GroupRecommendationSystem
 from app.main import _warm_up, lifespan
-from app.services.recommendation_service import RecommendationService
+from tests.fakes import FakeArticleRepository
 
 
 def _grs() -> GroupRecommendationSystem:
@@ -132,11 +132,9 @@ def test_concurrent_calls_compute_once():
 
 
 def test_warm_up_computes_metrics_for_the_requested_k():
-    with (
-        patch.object(RecommendationService, "_load_data"),
-        patch.object(RecommendationService, "_initialize_grs"),
-    ):
-        service = RecommendationService.__new__(RecommendationService)
+    service = RecommendationService(
+        FakeArticleRepository(), GrsPeriods(2020, 2022, 2023, 2025)
+    )
     service.groups = {0: {}, 1: {}}
     service.get_metrics = MagicMock()
 
@@ -149,7 +147,7 @@ def test_warm_up_helper_swallows_errors():
     service = MagicMock()
     service.warm_up.side_effect = RuntimeError("boom")
 
-    _warm_up(service)
+    _warm_up(service, MagicMock())
 
     service.warm_up.assert_called_once()
 
@@ -160,7 +158,8 @@ def test_lifespan_starts_warm_up_thread_when_enabled():
     service.warm_up.side_effect = lambda k: started.set()
 
     with (
-        patch("app.main.RecommendationService", return_value=service),
+        patch("app.main.build_prediction_service", return_value=MagicMock()),
+        patch("app.main.build_recommendation_service", return_value=service),
         patch("app.main.settings.GRS_PRECOMPUTE_ON_STARTUP", True),
         patch("app.main.settings.GRS_PRECOMPUTE_K", 4),
     ):
@@ -174,7 +173,8 @@ def test_lifespan_skips_warm_up_when_disabled():
     service = MagicMock()
 
     with (
-        patch("app.main.RecommendationService", return_value=service),
+        patch("app.main.build_prediction_service", return_value=MagicMock()),
+        patch("app.main.build_recommendation_service", return_value=service),
         patch("app.main.settings.GRS_PRECOMPUTE_ON_STARTUP", False),
     ):
         with TestClient(FastAPI(lifespan=lifespan)):
@@ -187,12 +187,10 @@ def test_warm_up_helper_warms_ranking_before_recommendations():
     order = []
     service = MagicMock()
     service.warm_up.side_effect = lambda k: order.append("grs")
+    prediction = MagicMock()
+    prediction.get_ranking.side_effect = lambda: order.append("ranking")
 
-    with patch.object(analytics, "prediction_service") as prediction:
-        prediction.check_assets_loaded.return_value = True
-        prediction.get_ranking.side_effect = lambda: order.append("ranking")
-
-        _warm_up(service)
+    _warm_up(service, prediction)
 
     assert order == ["ranking", "grs"]
 
@@ -200,22 +198,16 @@ def test_warm_up_helper_warms_ranking_before_recommendations():
 def test_warm_up_helper_skips_ranking_when_assets_are_missing():
     service = MagicMock()
 
-    with patch.object(analytics, "prediction_service") as prediction:
-        prediction.check_assets_loaded.return_value = False
+    _warm_up(service, None)
 
-        _warm_up(service)
-
-    prediction.get_ranking.assert_not_called()
     service.warm_up.assert_called_once()
 
 
 def test_ranking_failure_does_not_block_recommendation_warm_up():
     service = MagicMock()
+    prediction = MagicMock()
+    prediction.get_ranking.side_effect = RuntimeError("ranking boom")
 
-    with patch.object(analytics, "prediction_service") as prediction:
-        prediction.check_assets_loaded.return_value = True
-        prediction.get_ranking.side_effect = RuntimeError("boom")
-
-        _warm_up(service)
+    _warm_up(service, prediction)
 
     service.warm_up.assert_called_once()
