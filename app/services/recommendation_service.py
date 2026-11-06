@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,7 @@ from typing import Any
 import pandas as pd
 
 from app.core.config import settings
+from app.domain.errors import GroupNotFound
 from app.grs.grs_production import (
     DataPreprocessor,
     DataValidator,
@@ -30,6 +32,9 @@ class RecommendationService:
             raise RuntimeError("No se configuró CENTINELA_DATA_PATH.")
 
         self.data_path = Path(configured_path).resolve()
+        self._metrics_k: int | None = None
+        self._metrics_df: pd.DataFrame | None = None
+        self._metrics_lock = threading.Lock()
 
         if not self.data_path.is_dir():
             raise FileNotFoundError(f"La carpeta de datos no existe: {self.data_path}")
@@ -120,7 +125,7 @@ class RecommendationService:
         k: int = 10,
     ) -> dict[str, Any]:
         if group_id not in self.groups:
-            raise KeyError(f"No existe el grupo con id {group_id}")
+            raise GroupNotFound(f"No existe el grupo con id {group_id}")
 
         recommendations_df = self.grs.recommend_for_group(
             group_id=group_id,
@@ -195,18 +200,21 @@ class RecommendationService:
         )
 
     def get_metrics(self, k: int = 10) -> dict[str, Any]:
-        if getattr(self, "_metrics_k", None) != k:
-            logger.info("Generando recomendaciones para métricas (k=%d)...", k)
+        # Un solo cálculo a la vez: dos peticiones con distinto k no deben
+        # pisarse el resultado, y el DataFrame se lee dentro del lock.
+        with self._metrics_lock:
+            if self._metrics_k != k:
+                logger.info("Generando recomendaciones para métricas (k=%d)...", k)
 
-            self.recommendations_df = self.grs.generate_all_recommendations(k=k)
-            self._metrics_k = k
+                self._metrics_df = self.grs.generate_all_recommendations(k=k)
+                self._metrics_k = k
 
-            logger.info(
-                "Recomendaciones generadas para métricas: %d",
-                len(self.recommendations_df),
-            )
+                logger.info(
+                    "Recomendaciones generadas para métricas: %d",
+                    len(self._metrics_df),
+                )
 
-        recommendations_df = self.recommendations_df
+            recommendations_df = self._metrics_df
 
         return {
             "groups_persistent": len(self.groups),

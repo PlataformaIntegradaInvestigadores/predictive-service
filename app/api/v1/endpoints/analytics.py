@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import JSONResponse
 
+from app.domain.errors import AffiliationNotFound
 from app.models.schemas import (
     AffiliationListResponse,
     CompareRequest,
@@ -95,11 +96,12 @@ def get_projection(
     proyección a futuro. Con `hypothetical_authors` se simula cómo cambiaría la
     proyección si la afiliación tuviera ese número de autores (escenario
     "What If")."""
-    result = service.get_projection(
-        affiliation_name, projection_years, hypothetical_authors
-    )
-    if "error" in result:
-        return JSONResponse(status_code=404, content=result)
+    try:
+        result = service.get_projection(
+            affiliation_name, projection_years, hypothetical_authors
+        )
+    except AffiliationNotFound as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
     return ProjectionResponse(**result)
 
 
@@ -120,10 +122,10 @@ def get_comparison(
     omiten de `results` en lugar de fallar toda la petición."""
     results = []
     for name in body.affiliation_names:
-        result = service.get_projection(name, projection_years)
-        if "error" in result:
+        try:
+            results.append(service.get_projection(name, projection_years))
+        except AffiliationNotFound:
             continue
-        results.append(result)
     return ComparisonResponse(results=results)
 
 

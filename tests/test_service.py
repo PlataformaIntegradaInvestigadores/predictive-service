@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from app.domain.errors import AffiliationNotFound
 from app.services.prediction_service import PredictionService
 
 
@@ -75,9 +76,9 @@ class TestGetAllAffiliations:
 
 
 class TestGetProjection:
-    def test_returns_error_for_unknown_affiliation(self, mock_service):
-        result = mock_service.get_projection("UnknownUniversity", 3)
-        assert "error" in result
+    def test_raises_for_unknown_affiliation(self, mock_service):
+        with pytest.raises(AffiliationNotFound, match="no fue encontrada"):
+            mock_service.get_projection("UnknownUniversity", 3)
 
     def test_returns_correct_structure(self, mock_service):
         result = mock_service.get_projection("MIT", 3)
@@ -107,7 +108,6 @@ class TestGetProjection:
 
     def test_projection_with_hypothetical_authors(self, mock_service):
         result = mock_service.get_projection("MIT", 2, hypothetical_authors=100)
-        assert "error" not in result
         predicted_points = [d for d in result["data"] if d["type"] == "predicted"]
         assert len(predicted_points) == 2
 
@@ -182,21 +182,21 @@ class TestLoadAssetsErrors:
 
 
 class TestGetProjectionEdgeCases:
-    def test_returns_error_for_unknown_affiliation(self, mock_service):
-        result = mock_service.get_projection("UnknownUniversity", 3)
-        assert "error" in result
+    def test_raises_for_unknown_affiliation(self, mock_service):
+        with pytest.raises(AffiliationNotFound, match="no fue encontrada"):
+            mock_service.get_projection("UnknownUniversity", 3)
 
-    def test_returns_error_when_affiliation_not_in_encoder(self, mock_service):
+    def test_raises_when_affiliation_not_in_encoder(self, mock_service):
         mock_service.encoder.classes_ = np.array(["MIT"])
-        result = mock_service.get_projection("Stanford", 3)
-        assert "error" in result
+        with pytest.raises(AffiliationNotFound):
+            mock_service.get_projection("Stanford", 3)
 
-    def test_returns_error_when_no_historical_data(self, mock_service):
+    def test_raises_when_no_historical_data(self, mock_service):
         mock_service.historical_df = pd.DataFrame(
             {"affiliation_name": ["MIT"], "year": [2020], "publication_count": [10], "distinct_authors": [5]}
         )
-        result = mock_service.get_projection("Stanford", 3)
-        assert "error" in result
+        with pytest.raises(AffiliationNotFound, match="No hay datos históricos"):
+            mock_service.get_projection("Stanford", 3)
 
     def test_projection_with_zero_authors(self, mock_service):
         mock_service.historical_df = pd.DataFrame(
@@ -231,3 +231,25 @@ class TestGetModelDetailsEdgeCases:
         result = mock_service.get_model_details()
         assert "training_data_range" in result
         assert "target_variable" in result
+
+
+class TestLoadFailuresAreLogged:
+    def test_missing_file_is_logged_as_error(self, caplog):
+        with patch(
+            "app.services.prediction_service.joblib.load",
+            side_effect=FileNotFoundError(2, "missing", "missing.pkl"),
+        ):
+            with caplog.at_level("ERROR"):
+                PredictionService()
+
+        assert "missing.pkl" in caplog.text
+
+    def test_unexpected_error_is_logged_with_traceback(self, caplog):
+        with patch(
+            "app.services.prediction_service.joblib.load",
+            side_effect=RuntimeError("boom"),
+        ):
+            with caplog.at_level("ERROR"):
+                PredictionService()
+
+        assert "boom" in caplog.text

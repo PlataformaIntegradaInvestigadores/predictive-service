@@ -1,3 +1,4 @@
+import threading
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -35,7 +36,7 @@ def mock_recommendation_service():
             "score": [0.85, 0.65, 0.45],
         }
     )
-    service.recommendations_df = pd.DataFrame(
+    service._metrics_df = pd.DataFrame(
         {
             "group_id": [0, 0, 0],
             "n_members": [2, 2, 2],
@@ -50,6 +51,7 @@ def mock_recommendation_service():
         }
     )
     service._metrics_k = None
+    service._metrics_lock = threading.Lock()
 
     return service
 
@@ -220,3 +222,53 @@ class TestRecommendationService:
         assert "topics_unique" in result
         assert "coverage" in result
         assert "fairness_gini" in result
+
+
+class TestMetricsAreSerialized:
+    def test_concurrent_requests_with_different_k_do_not_mix_results(
+        self, mock_recommendation_service
+    ):
+        service = mock_recommendation_service
+        service._metrics_df = None
+        calls = []
+
+        def generate(k):
+            calls.append(k)
+            return pd.DataFrame(
+                {
+                    "group_id": [0],
+                    "n_members": [2],
+                    "papers_total": [5],
+                    "rank": [1],
+                    "topic": [f"t{k}"],
+                    "novelty": [0.5],
+                    "relevance": [0.5],
+                    "collaborative_signal": [0.1],
+                    "score": [0.5],
+                    "is_new_vs_recent": [1],
+                }
+            )
+
+        service.grs.generate_all_recommendations.side_effect = generate
+
+        threads = [
+            threading.Thread(target=service.get_metrics, kwargs={"k": k})
+            for k in (3, 5, 3, 5, 3, 5)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        # Never computed twice in parallel for the same k in a row.
+        assert all(a != b for a, b in zip(calls, calls[1:]))
+        assert service._metrics_k in (3, 5)
+        assert service._metrics_df["topic"].iloc[0] == f"t{service._metrics_k}"
+
+
+def test_unknown_group_is_a_group_not_found(mock_recommendation_service):
+    from app.domain.errors import GroupNotFound
+
+    with pytest.raises(GroupNotFound, match="999"):
+        mock_recommendation_service.get_group_recommendations(group_id=999)
+    assert issubclass(GroupNotFound, KeyError)

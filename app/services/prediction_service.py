@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 
 import joblib
 import pandas as pd
+
+from app.domain.errors import AffiliationNotFound
+
+logger = logging.getLogger(__name__)
 
 
 class PredictionService:
@@ -37,17 +42,14 @@ class PredictionService:
             self.model = joblib.load(self.MODEL_PATH)
             self.encoder = joblib.load(self.ENCODER_PATH)
             self.historical_df = pd.read_csv(self.HISTORICAL_DATA_PATH)
-            print("Servicio de predicción inicializado y activos cargados.")
-        except FileNotFoundError as e:
-            print(
-                f"CRITICAL ERROR: No se pudo inicializar PredictionService. "
-                f"Archivo no encontrado: {e.filename}"
+            logger.info("Servicio de predicción inicializado y activos cargados.")
+        except FileNotFoundError as exc:
+            logger.error(
+                "No se pudo inicializar PredictionService. Archivo no encontrado: %s",
+                exc.filename,
             )
-        except Exception as e:
-            print(
-                f"CRITICAL ERROR: Ocurrió un error al cargar activos en "
-                f"PredictionService: {e}"
-            )
+        except Exception:
+            logger.exception("Error al cargar los activos de PredictionService")
 
     def check_assets_loaded(self):
         """Verifica si todos los activos necesarios están cargados."""
@@ -76,6 +78,12 @@ class PredictionService:
         prediction = self.model.predict(input_data)
         return round(prediction[0])
 
+    def _affiliation_history(self, affiliation_name: str) -> pd.DataFrame:
+        """Filas históricas de una afiliación, de la más antigua a la más reciente."""
+        return self.historical_df[
+            self.historical_df["affiliation_name"] == affiliation_name
+        ].sort_values("year")
+
     def get_projection(
         self,
         affiliation_name: str,
@@ -85,18 +93,19 @@ class PredictionService:
         """
         Calcula la proyección histórica y futura para una afiliación.
         Incluye la lógica para el análisis "What If".
+
+        Lanza AffiliationNotFound si la afiliación no existe o no tiene historial.
         """
         if affiliation_name not in self.encoder.classes_:
-            return {"error": f"La afiliación '{affiliation_name}' no fue encontrada."}
+            raise AffiliationNotFound(
+                f"La afiliación '{affiliation_name}' no fue encontrada."
+            )
 
-        affiliation_df = self.historical_df[
-            self.historical_df["affiliation_name"] == affiliation_name
-        ].sort_values("year")
+        affiliation_df = self._affiliation_history(affiliation_name)
         if affiliation_df.empty:
-            return {
-                "error": f"No hay datos históricos para la afiliación "
-                f"'{affiliation_name}'."
-            }
+            raise AffiliationNotFound(
+                f"No hay datos históricos para la afiliación '{affiliation_name}'."
+            )
 
         historical_data = [
             {
@@ -169,9 +178,7 @@ class PredictionService:
         all_affiliations = self.get_all_affiliations()
 
         for affiliation_name in all_affiliations:
-            affiliation_df = self.historical_df[
-                self.historical_df["affiliation_name"] == affiliation_name
-            ].sort_values("year")
+            affiliation_df = self._affiliation_history(affiliation_name)
             if not affiliation_df.empty:
                 last_real_year_data = affiliation_df.iloc[-1]
                 current_year = int(last_real_year_data["year"])
