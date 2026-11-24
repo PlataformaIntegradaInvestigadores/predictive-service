@@ -56,9 +56,7 @@ class TestGetProjection:
         years = [p["year"] for p in predicted_points]
         assert years == [2022, 2023, 2024]
 
-    def test_model_predict_is_called_once_per_projected_year(
-        self, mock_service, model
-    ):
+    def test_model_predict_is_called_once_per_projected_year(self, mock_service, model):
         mock_service.get_projection("MIT", 2)
         assert [call[:2] for call in model.calls] == [(2022, "MIT"), (2023, "MIT")]
 
