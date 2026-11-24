@@ -1,12 +1,12 @@
 import threading
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
 from app.application.recommendation_service import GrsPeriods, RecommendationService
+from app.main import app
 from tests.fakes import FakeArticleRepository
 
 
@@ -132,39 +132,50 @@ class TestRecommendationsEndpoints:
         assert "diversity" in data
 
     def test_get_all_groups_server_error(self, recommendations_client):
-        original = recommendations_client.app.state.recommendation_service.get_all_recommendations
+        service = recommendations_client.app.state.recommendation_service
+        original = service.get_all_recommendations
+
         def boom(**kwargs):
             raise Exception("boom")
-        recommendations_client.app.state.recommendation_service.get_all_recommendations = boom
+
+        service.get_all_recommendations = boom
         response = recommendations_client.get("/api/v1/recommendations/groups")
         assert response.status_code == 500
-        recommendations_client.app.state.recommendation_service.get_all_recommendations = original
+        service.get_all_recommendations = original
 
     def test_get_group_recommendations_server_error(self, recommendations_client):
-        original = recommendations_client.app.state.recommendation_service.get_group_recommendations
+        service = recommendations_client.app.state.recommendation_service
+        original = service.get_group_recommendations
+
         def boom(**kwargs):
             raise Exception("boom")
-        recommendations_client.app.state.recommendation_service.get_group_recommendations = boom
+
+        service.get_group_recommendations = boom
         response = recommendations_client.get("/api/v1/recommendations/group/0")
         assert response.status_code == 500
-        recommendations_client.app.state.recommendation_service.get_group_recommendations = original
+        service.get_group_recommendations = original
 
     def test_get_recommendations_by_members_server_error(self, recommendations_client):
-        original = recommendations_client.app.state.recommendation_service.get_group_recommendations
+        service = recommendations_client.app.state.recommendation_service
+        original = service.get_group_recommendations
+
         def boom(**kwargs):
             raise Exception("boom")
-        recommendations_client.app.state.recommendation_service.get_group_recommendations = boom
+
+        service.get_group_recommendations = boom
         payload = {"scopus_ids": ["u1", "u2"]}
         response = recommendations_client.post(
             "/api/v1/recommendations/by-members", json=payload
         )
         assert response.status_code == 500
-        recommendations_client.app.state.recommendation_service.get_group_recommendations = original
+        service.get_group_recommendations = original
 
     def test_get_metrics_server_error(self, recommendations_client):
         original = recommendations_client.app.state.recommendation_service.get_metrics
+
         def boom(**kwargs):
             raise Exception("boom")
+
         recommendations_client.app.state.recommendation_service.get_metrics = boom
         response = recommendations_client.get("/api/v1/recommendations/metrics")
         assert response.status_code == 500

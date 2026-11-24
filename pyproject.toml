@@ -1,11 +1,18 @@
 [tool.ruff]
 target-version = "py39"
+# Applied migrations are never edited, not even for style.
+extend-exclude = ["**/migrations/**"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI dependency markers are meant to be called in argument defaults.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.Path", "fastapi.Body"]
+
 [tool.black]
 target-version = ["py39"]
+extend-exclude = "/migrations/"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,7 +1,3 @@
-from pydantic_settings import SettingsConfigDict
-
-import pytest
-
 from app.core.config import Settings
 
 

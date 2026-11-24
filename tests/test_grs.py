@@ -1,6 +1,3 @@
-from unittest.mock import MagicMock, patch
-
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -41,7 +38,10 @@ class TestDataValidator:
         df_articles = make_articles_df()
         df_author_article = make_author_article_df()
         df_topic_article = make_topic_article_df()
-        assert DataValidator.validate(df_articles, df_author_article, df_topic_article) is True
+        assert (
+            DataValidator.validate(df_articles, df_author_article, df_topic_article)
+            is True
+        )
 
     def test_validate_missing_article_column(self):
         df_articles = pd.DataFrame({"other": [1]})
@@ -65,7 +65,9 @@ class TestDataValidator:
             DataValidator.validate(df_articles, df_author_article, df_topic_article)
 
     def test_validate_too_few_articles(self):
-        df_articles = pd.DataFrame({"scopus_id": ["a1"], "publication_date": ["2020-01-01"]})
+        df_articles = pd.DataFrame(
+            {"scopus_id": ["a1"], "publication_date": ["2020-01-01"]}
+        )
         df_author_article = pd.DataFrame({"scopus_id": ["a1"], "authid": ["u1"]})
         df_topic_article = pd.DataFrame({"article_id": ["a1"], "topic": ["t1"]})
         with pytest.raises(ValueError):
@@ -86,7 +88,9 @@ class TestDataPreprocessor:
         df_articles = make_articles_df()
         df_author_article = make_author_article_df()
         df_topic_article = make_topic_article_df()
-        preprocessor = DataPreprocessor(df_articles, df_author_article, df_topic_article)
+        preprocessor = DataPreprocessor(
+            df_articles, df_author_article, df_topic_article
+        )
         mapping = preprocessor.get_article_authors_map()
         assert "a0" in mapping
         assert "u1" in mapping["a0"]
@@ -95,7 +99,9 @@ class TestDataPreprocessor:
         df_articles = make_articles_df()
         df_author_article = make_author_article_df()
         df_topic_article = make_topic_article_df()
-        preprocessor = DataPreprocessor(df_articles, df_author_article, df_topic_article)
+        preprocessor = DataPreprocessor(
+            df_articles, df_author_article, df_topic_article
+        )
         mapping = preprocessor.get_article_topics_map()
         assert "a0" in mapping
         assert "t1" in mapping["a0"]
@@ -104,7 +110,9 @@ class TestDataPreprocessor:
         df_articles = make_articles_df()
         df_author_article = make_author_article_df()
         df_topic_article = make_topic_article_df()
-        preprocessor = DataPreprocessor(df_articles, df_author_article, df_topic_article)
+        preprocessor = DataPreprocessor(
+            df_articles, df_author_article, df_topic_article
+        )
         topics = preprocessor.get_all_topics()
         assert len(topics) == 20
 
@@ -112,7 +120,9 @@ class TestDataPreprocessor:
         df_articles = make_articles_df()
         df_author_article = make_author_article_df()
         df_topic_article = make_topic_article_df()
-        preprocessor = DataPreprocessor(df_articles, df_author_article, df_topic_article)
+        preprocessor = DataPreprocessor(
+            df_articles, df_author_article, df_topic_article
+        )
         freq = preprocessor.get_topic_frequency()
         assert freq["t1"] == 100
 
@@ -120,7 +130,9 @@ class TestDataPreprocessor:
         df_articles = make_articles_df()
         df_author_article = make_author_article_df()
         df_topic_article = make_topic_article_df()
-        preprocessor = DataPreprocessor(df_articles, df_author_article, df_topic_article)
+        preprocessor = DataPreprocessor(
+            df_articles, df_author_article, df_topic_article
+        )
         p1, p2 = preprocessor.get_articles_by_period()
         assert "a0" in p1
         assert "a3" in p2
@@ -129,7 +141,9 @@ class TestDataPreprocessor:
         df_articles = make_articles_df()
         df_author_article = make_author_article_df()
         df_topic_article = make_topic_article_df()
-        preprocessor = DataPreprocessor(df_articles, df_author_article, df_topic_article)
+        preprocessor = DataPreprocessor(
+            df_articles, df_author_article, df_topic_article
+        )
         article_topics = preprocessor.get_article_topics_map()
         p1, p2 = preprocessor.get_articles_by_period()
         freq_p1, freq_p2 = preprocessor.get_topic_frequency_by_period(
@@ -169,7 +183,9 @@ class TestGroupIdentifier:
         groups_p1 = {("u1", "u2"): {"papers": 1, "topics": {"t1"}}}
         groups_p2 = {("u1", "u2"): {"papers": 0, "topics": {"t2"}}}
         identifier = GroupIdentifier({}, {})
-        persistent = identifier.identify_persistent(groups_p1, groups_p2, min_papers_total=2)
+        persistent = identifier.identify_persistent(
+            groups_p1, groups_p2, min_papers_total=2
+        )
         assert len(persistent) == 0
 
 
@@ -204,15 +220,6 @@ class TestSimilarityCalculator:
 
 class TestGroupRecommendationSystem:
     def test_recommend_for_group(self):
-        groups = {
-            0: {
-                "members": ["u1", "u2"],
-                "n_members": 2,
-                "papers_total": 5,
-                "topics_p1": {"t1"},
-                "topics_p2": {"t2"},
-            }
-        }
         all_topics = {"t1", "t2", "t3"}
         topic_frequency = {"t1": 10, "t2": 5, "t3": 1}
         topic_frequency_p1 = {"t1": 5, "t2": 3}
@@ -250,15 +257,6 @@ class TestGroupRecommendationSystem:
         assert len(recs) == 0
 
     def test_recommend_for_group_filters_explored(self):
-        groups = {
-            0: {
-                "members": ["u1", "u2"],
-                "n_members": 2,
-                "papers_total": 5,
-                "topics_p1": {"t1"},
-                "topics_p2": {"t1"},
-            }
-        }
         all_topics = {"t1", "t2", "t3"}
         topic_frequency = {"t1": 10, "t2": 5, "t3": 1}
         topic_frequency_p1 = {"t1": 5, "t2": 3}
@@ -280,15 +278,6 @@ class TestGroupRecommendationSystem:
         assert "t1" not in recs["topic"].values
 
     def test_generate_all_recommendations(self):
-        groups = {
-            0: {
-                "members": ["u1", "u2"],
-                "n_members": 2,
-                "papers_total": 5,
-                "topics_p1": {"t1"},
-                "topics_p2": {"t2"},
-            }
-        }
         all_topics = {"t1", "t2", "t3"}
         topic_frequency = {"t1": 10, "t2": 5, "t3": 1}
         topic_frequency_p1 = {"t1": 5, "t2": 3}
